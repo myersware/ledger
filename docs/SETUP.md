@@ -23,14 +23,14 @@ Everything lives in one sqlite file, `data/ledger.sqlite` (or the path in `LEDGE
 - data from Quicken can be loaded by the optional, separate `ledger-quicken-import` tool, which writes a new Ledger database for you to start from.
 
 ## 2. Migrations and backups
-The schema version is stored in sqlite as `PRAGMA user_version`. The current version is 9.
+The schema version is stored in sqlite as `PRAGMA user_version`. The current version is 10.
 - when the version is older than the code, the server (or `--init-only`) first copies the database to `data/backups/ledger-<timestamp>-pre-vN.sqlite`, then migrates. One backup per start that needs a migration.
-- a fresh copy jumps from 0 to 9 in one go, so it gets one `pre-v9` backup (an empty start gets none: nothing to lose). After you pull newer code that adds a schema version, the next start makes another backup first.
+- a fresh copy jumps from 0 to 10 in one go, so it gets one `pre-v10` backup (an empty start gets none: nothing to lose). After you pull newer code that adds a schema version, the next start makes another backup first.
 - imports and the one-off fix scripts also take a backup first (`pre-import-...`, `pre-fix-...`).
 - check the version: `sqlite3 data/ledger.sqlite "pragma user_version"`.
 - to go back to an older state: stop the server and put a backup file back as `data/ledger.sqlite`. Everything done after that backup is lost.
 
-What the migrations add (see `core.py`): v1 indexes, v2 `edit_log` + transfer link columns, v3 `accounts.hidden`, v4 `transactions.ext_id` + `import_map`, v5 `reconcile`, v6 the account-details columns, v7 the download settings, v8 the `scheduled` table (scheduled transactions), v9 `scheduled.inv_json` (scheduled investment transactions) and `import_map.csv_map` (saved csv column mapping).
+What the migrations add (see `core.py`): v1 indexes, v2 `edit_log` + transfer link columns, v3 `accounts.hidden`, v4 `transactions.ext_id` + `import_map`, v5 `reconcile`, v6 the account-details columns, v7 the download settings, v8 the `scheduled` table (scheduled transactions), v9 `scheduled.inv_json` (scheduled investment transactions) and `import_map.csv_map` (saved csv column mapping), v10 the `inventory_items` table (household inventory) and a small `settings` table. Photos and receipts for inventory items are files in `data/inventory/<item id>/`: they are not in the database, so copy that folder too when you move or back up (the Data page backup is the database only).
 
 You can also make a backup yourself any time: **Data** page > **Back up now** (or `POST /api/backups`). **restore…** on the same page backs up the current database first, then swaps in the chosen one, without a restart.
 

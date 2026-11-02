@@ -4,7 +4,7 @@ from decimal import Decimal as Dc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("LEDGER_DB", os.path.join(HERE, "data", "ledger.sqlite"))
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Investment cash rules (a best reading of QIF semantics, not Quicken's own number).
 CASH_PLUS = {"Div", "CGLong", "CGShort", "IntInc", "Sell", "XIn", "Cash", "ContribX", "MiscInc"}
@@ -118,6 +118,11 @@ def migrate(backup=True):
         db.executescript("""
           ALTER TABLE scheduled ADD COLUMN inv_json TEXT;
           ALTER TABLE import_map ADD COLUMN csv_map TEXT;""")
+    if ver < 10:  # household inventory (valuables list; files live in data/inventory/<item_id>/) and a small key/value settings table
+        db.executescript("""
+          CREATE TABLE IF NOT EXISTS inventory_items(item_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, category TEXT, make TEXT, model TEXT, serial TEXT,
+            location TEXT, purchase_date TEXT, purchase_price REAL, current_value REAL, value_date TEXT, notes TEXT, txn_id INTEGER, created TEXT, updated TEXT);
+          CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);""")
     db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     db.commit(); db.close()
 
@@ -174,6 +179,23 @@ def sync_account_names(db):
         db.execute(f"UPDATE {tbl} SET {col}=(SELECT name FROM accounts a WHERE a.account_id={tbl}.{idc}) "
                    f"WHERE {idc} IS NOT NULL AND {col} IS NOT (SELECT name FROM accounts a WHERE a.account_id={tbl}.{idc}) "
                    f"AND EXISTS(SELECT 1 FROM accounts a WHERE a.account_id={tbl}.{idc})")
+
+
+def get_setting(db, key, default=None):
+    try: r = db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    except sqlite3.OperationalError: return default   # a database older than v10
+    return default if r is None else r[0]
+
+
+def set_setting(key, value):
+    db = sqlite3.connect(DB_PATH)
+    db.execute("INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+    db.commit(); db.close()
+
+
+def household_on(db):
+    """Net worth includes the inventory's 'Household items' line unless the setting is turned off (default on)."""
+    return get_setting(db, "household_networth", "1") != "0"
 
 
 def set_hidden(aid, hidden):

@@ -58,4 +58,18 @@ def acct_csv(db, m, qs):
                "text/csv", "ledger-accounts.csv")
 
 
-ROUTES = [("GET", r"/api/export/transactions\.csv", txn_csv), ("GET", r"/api/export/accounts\.csv", acct_csv)]
+@reading
+def inventory_csv(db, m, qs):
+    """The household inventory, one row per item (for an insurer). value_used = current value, else purchase price;"""
+    import inventory
+    rows = []
+    for r in db.execute("SELECT * FROM inventory_items ORDER BY category COLLATE NOCASE, name COLLATE NOCASE, item_id"):
+        v = r["current_value"] if r["current_value"] is not None else r["purchase_price"]
+        rows.append([r["item_id"], r["name"], r["category"] or "", r["make"] or "", r["model"] or "", r["serial"] or "", r["location"] or "", r["purchase_date"] or "",
+                     "" if r["purchase_price"] is None else r["purchase_price"], "" if r["current_value"] is None else r["current_value"], r["value_date"] or "",
+                     "" if v is None else v, r["notes"] or "", r["txn_id"] or "", len(inventory._files(r["item_id"]))])
+    return Raw(_csv(["item_id", "name", "category", "make", "model", "serial", "location", "purchase_date", "purchase_price", "current_value", "value_date", "value_used", "notes", "purchase_txn_id", "attachments"], rows),
+               "text/csv", "ledger-inventory.csv")
+
+
+ROUTES = [("GET", r"/api/export/transactions\.csv", txn_csv), ("GET", r"/api/export/accounts\.csv", acct_csv), ("GET", r"/api/export/inventory\.csv", inventory_csv)]

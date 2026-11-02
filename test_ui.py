@@ -37,6 +37,13 @@ try:
       ["create account from slug", None, "await impNew('newbank'); const nm=n_name.value; n_type.value='Checking'; await nSave(); await new Promise(r=>setTimeout(r,800)); return [nm, location.hash]"],
       ["create security shortcut", "#/import", "await impSec('NEWSEC'); return 1"],
       ["payee merge", "#/payees", "PYS=new Set(PYL.filter(p=>/cafe/i.test(p.name)).map(p=>p.name)); window.prompt=()=>'Cafe Uno'; await pyMerge(); await new Promise(r=>setTimeout(r,500)); return document.getElementById('app').innerText.slice(0,300)"],
+      # household inventory
+      ["inventory page empty", "#/inventory", "return document.getElementById('app').innerText"],
+      ["add item with purchase link", None, f"await vForm(); {fill(v_name='Martin D-28', v_cat='Musical instruments', v_make='Martin', v_serial='SN1', v_val='2100')}; await vPick(); const n=VQ.length; if(!n) return ['noVQ', v_res.innerHTML.slice(0,300), JSON.stringify(await J('GET','/api/inventory/txn-search?q=')).slice(0,300)]; vChoose(0); const pre=[v_pdate.value, v_price.value, v_tx.textContent]; v_save.click(); await new Promise(r=>setTimeout(r,900)); return [n, pre, vdlg.open, document.getElementById('app').innerText.slice(0,500)]"],
+      ["edit item + upload photo", None, "const it=INVL.items[0]; await vForm(it.id); const f=new File([Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='),c=>c.charCodeAt(0))],'front.png',{type:'image/png'}); const dt=new DataTransfer(); dt.items.add(f); v_up.files=dt.files; await vUpload(); await new Promise(r=>setTimeout(r,500)); const imgs=document.querySelectorAll('#v_files img').length, txt=v_files.innerText; v_loc.value='Studio'; v_save.click(); await new Promise(r=>setTimeout(r,800)); return [imgs, txt, document.getElementById('app').innerText.includes('Studio'), document.getElementById('app').innerText.includes('1')]"],
+      ["search + sort", None, "INV.q='SN1'; await inv_(); const a=document.getElementById('app').innerText.includes('Martin D-28'); INV.q='nomatch'; await inv_(); const b=document.getElementById('app').innerText.includes('Martin D-28'); INV.q=''; INV.sort='value'; await inv_(); return [a,b]"],
+      ["net worth toggle", "#/networth", "const a=document.getElementById('app').innerText.includes('Household items'); await nwHouse(false); await new Promise(r=>setTimeout(r,500)); const b=document.getElementById('app').innerText.includes('Household items'); await nwHouse(true); await new Promise(r=>setTimeout(r,500)); return [a,b,document.getElementById('app').innerText.includes('Household items')]"],
+      ["data page inventory export", "#/data", "return document.getElementById('app').innerText"],
     ]
     sf = os.path.join(E.tmp, "steps.json"); json.dump(steps, open(sf, "w"))
     r = subprocess.run(["node", "ui_cdp.js", str(DBG), f"http://127.0.0.1:{E.port}", sf], capture_output=True, text=True, timeout=120)
@@ -65,6 +72,13 @@ try:
     m = {x["slug"]: x for x in api("GET", "/api/import/mapping")[1]}; check("slug mapped to the new account", m.get("newbank", {}).get("account_id"), m)
     check("create security shortcut", any(x["symbol"] == "NEWSEC" for x in api("GET", "/api/securities")[1]["securities"]), api("GET", "/api/securities")[1])
     check("payee merge from the page", [p["name"] for p in api("GET", "/api/payees")[1]["payees"] if "afe" in p["name"]] == ["Cafe Uno"], api("GET", "/api/payees")[1])
+    inv = O["add item with purchase link"]; check("purchase picker finds the transaction and prefills date and price", inv[0] >= 1 and inv[1][0] == "2026-03-01" and inv[1][1] == "80.00" and "#" in inv[1][2], inv[:3])
+    check("item saved from the dialog (listed with value)", inv[2] is False and "Martin D-28" in inv[3] and "2,100.00" in inv[3], inv[2:])
+    it = api("GET", "/api/inventory")[1]["items"][0]; check("item stored with link", it["txn_id"] and it["serial"] == "SN1" and it["current_value"] == 2100, it)
+    ed = O["edit item + upload photo"]; check("photo uploaded from the dialog and shown as a thumbnail", ed[0] == 1 and "front.png" in ed[1], ed[:2]); check("edit saved from the dialog", ed[2] is True and api("GET", "/api/inventory")[1]["items"][0]["location"] == "Studio" and api("GET", "/api/inventory")[1]["items"][0]["files"] == 1, ed)
+    check("search filters the list", O["search + sort"] == [True, False], O["search + sort"])
+    check("net worth shows Household items, toggle hides it, toggle back shows it", O["net worth toggle"] == [True, False, True], O["net worth toggle"])
+    check("inventory page empty text", "Household inventory" in O["inventory page empty"] and "0 item(s)" in O["inventory page empty"], O["inventory page empty"][:200]); check("data page offers the inventory csv", "Download household inventory" in O["data page inventory export"])
 finally:
-    ch.terminate(); E.stop(); shutil.rmtree(prof, ignore_errors=True)
+    ch.terminate(); E.stop(); print((E.p.stdout.read() or '')[-1500:]) if os.environ.get('UI_DEBUG') else 0; shutil.rmtree(prof, ignore_errors=True)
 sys.exit(0 if check.ok else 1)

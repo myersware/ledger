@@ -3,7 +3,7 @@
 import argparse, datetime, json, os, re, sqlite3, sys, traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs
-import account_details, backups, catalog, core, downloads, edits, exports, importer, invest, names, plaid, portfolio, reconcile, reports, scheduled
+import account_details, backups, catalog, core, downloads, edits, exports, importer, inventory, invest, names, plaid, portfolio, reconcile, reports, scheduled
 
 STATIC = os.path.join(core.HERE, "static")
 
@@ -33,7 +33,7 @@ class H(BaseHTTPRequestHandler):
     def write(self, fn):
         try:
             r = fn()
-            if isinstance(r, edits.Raw): self.send(200, r.body, r.ctype, {"Content-Disposition": f'attachment; filename="{r.filename}"'})
+            if isinstance(r, edits.Raw): self.send(200, r.body, r.ctype, {"Content-Disposition": f'{"inline" if r.inline else "attachment"}; filename="{r.filename}"', "X-Content-Type-Options": "nosniff"})
             else: self.send(200, json.dumps(r))
         except edits.ApiError as e:
             self.send(e.code, json.dumps({"error": str(e)}))
@@ -43,7 +43,7 @@ class H(BaseHTTPRequestHandler):
     def extra(self, method):
         """The newer endpoints (accounts, categories, securities, prices, scheduled) live in module ROUTES tables."""
         p = urlparse(self.path).path
-        for mod in (account_details, catalog, scheduled, invest, names, backups, exports, importer):
+        for mod in (account_details, catalog, scheduled, invest, inventory, names, backups, exports, importer):
             fn = edits.route(mod.ROUTES, method, p)
             if fn:
                 arg = {k: v[0] for k, v in parse_qs(urlparse(self.path).query).items()} if method == "GET" else None
@@ -123,7 +123,7 @@ class H(BaseHTTPRequestHandler):
                     try:
                         if p == "/api/reports/spending": r = reports.spending(db, qs.get("from", today[:4] + "-01-01"), qs.get("to", today), h, st)
                         elif p == "/api/reports/spending/transactions": r = reports.category_transactions(db, qs.get("category", ""), qs.get("section", "expense"), qs.get("from", today[:4] + "-01-01"), qs.get("to", today), h, st)
-                        elif p == "/api/reports/networth": r = reports.networth(db, qs.get("from", str(int(today[:4]) - 10) + today[4:]), qs.get("to", today), qs.get("gran", "auto"), h)
+                        elif p == "/api/reports/networth": r = reports.networth(db, qs.get("from", str(int(today[:4]) - 10) + today[4:]), qs.get("to", today), qs.get("gran", "auto"), h, household=(qs["household"] == "1") if "household" in qs else None)
                         else: return self.send(404, json.dumps({"error": "not found"}))
                         return self.send(200, json.dumps(r))
                     except reports.ReportError as e: return self.send(400, json.dumps({"error": str(e)}))

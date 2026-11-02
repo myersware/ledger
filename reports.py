@@ -1,5 +1,5 @@
 """Read-only reports: spending by category and net worth over time. Never writes."""
-import bisect, datetime, json
+import bisect, datetime, json, sqlite3
 from decimal import Decimal as Dc
 import core
 
@@ -93,7 +93,19 @@ def _points(d1, d2, gran):
     return pts, gran
 
 
-def networth(db, d1, d2, gran="auto", hidden=False, detail=False):
+HOUSEHOLD = "Household items"
+
+
+def household_cents(db, on):
+    """Inventory value by date: [(purchase_date or None, cents)] using current_value, else purchase_price. (not an account; never part of an account balance)"""
+    if not on: return []
+    try: rows = db.execute("SELECT purchase_date, COALESCE(current_value, purchase_price, 0) AS v FROM inventory_items").fetchall()
+    except sqlite3.OperationalError: return []
+    return [(r["purchase_date"] or None, core.cents(r["v"])) for r in rows]
+
+
+def networth(db, d1, d2, gran="auto", hidden=False, detail=False, household=None):
+    """household=None follows the saved setting (default on); True/False overrides it. It adds one 'Household items' line (in assets) and nothing else."""
     today = datetime.date.today().isoformat()
     d1, d2 = _d(d1, "from"), min(_d(d2, "to"), today)
     if d1 > d2: raise ReportError("from is after to (to is capped at today)")
@@ -128,12 +140,18 @@ def networth(db, d1, d2, gran="auto", hidden=False, detail=False):
             vals.append(cash + int((mv * 100).to_integral_value()))
         series.append((a["account_id"], a["name"], typ, vals))
     types = sorted({s[2] for s in series if s[2]} | {s[2] for s in series}, key=lambda t: (t is None, str(t)))
+    on = core.household_on(db) if household is None else bool(household)
+    items = household_cents(db, on)
+    if items: types.append(HOUSEHOLD)
     out = []
     for k, D in enumerate(pts):
         bt = {}
         for _, _, typ, v in series: bt[typ] = bt.get(typ, 0) + v[k]
+        if items: bt[HOUSEHOLD] = sum(c for d, c in items if d is None or d <= D)
         assets = sum(c for t, c in bt.items() if t not in LIAB); liab = sum(c for t, c in bt.items() if t in LIAB)
         p = dict(date=D, types={str(t): c / 100 for t, c in bt.items()}, assets=assets / 100, liabilities=liab / 100, net=(assets + liab) / 100)
         if detail: p["accounts"] = {s[0]: s[3][k] for s in series}
         out.append(p)
-    return dict(date_from=d1, date_to=d2, granularity=gran, hidden=hidden, types=[str(t) for t in types], points=out)
+    n = db.execute("SELECT COUNT(*) FROM inventory_items").fetchone()[0] if db.execute("SELECT 1 FROM sqlite_master WHERE name='inventory_items'").fetchone() else 0
+    return dict(date_from=d1, date_to=d2, granularity=gran, hidden=hidden, types=[str(t) for t in types], points=out,
+                household=dict(included=bool(items), items=n, enabled=on))

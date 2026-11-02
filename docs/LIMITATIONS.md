@@ -29,6 +29,12 @@ What Ledger can't do. This comes from reading the code and running it. If a feat
 - **No printing, no export of the ledger** to csv/QIF.
 - **Reports are two only:** spending by category and net worth over time. No income/expense by payee, no cash flow, no investment performance.
 
+## Household inventory
+- **Values are your own estimates**: no depreciation, no price lookup, no history of past values (only the latest current value and its date). The Net worth line uses that one value for every date from the purchase date on.
+- **No sold / disposed status** and no multiple quantities per item: delete a sold item (or enter each one separately).
+- **Photos and receipts are files, not database rows.** They are not in the Data page backups or `edit_log`: copy `data/inventory/` yourself when you back up or move. Restoring an old database backup can leave files of items that no longer exist (and a re-used item number may show them); delete them by hand.
+- Uploads are whole files in memory (max 25 MB each), no thumbnails are generated, and only images and PDFs open in the browser.
+
 ## Investments
 - The **tracking method is a note only** (Simple/Complete in Account Details). The app always keeps positions and transactions.
 - Holdings are valued at the **last price in the database** (the last price you entered). There is no price download; prices are typed in on the Securities page (or recorded from a Buy/Sell price), so investment balances and net worth go stale after that date.

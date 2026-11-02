@@ -3,7 +3,7 @@ import datetime, json, re, sqlite3, uuid
 import core
 
 PK = {"transactions": "txn_id", "splits": "split_id", "reconcile": "id", "accounts": "account_id", "categories": "category_id", "securities": "security_id",
-      "prices": "price_id", "scheduled": "sched_id", "memorized_transactions": "memorized_id", "payees": "payee_id", "tags": "tag_id"}
+      "prices": "price_id", "scheduled": "sched_id", "memorized_transactions": "memorized_id", "payees": "payee_id", "tags": "tag_id", "inventory_items": "item_id"}
 OK_TYPES = {"Bank", "CCard", "Cash", "Oth A", "Oth L"}
 
 
@@ -13,7 +13,7 @@ def batch_id(prefix):  # unique even for two batches in the same second
 
 class Raw:
     """A non-JSON response (a download)."""
-    def __init__(self, body, ctype, filename): self.body, self.ctype, self.filename = body, ctype, filename
+    def __init__(self, body, ctype, filename, inline=False): self.body, self.ctype, self.filename, self.inline = body, ctype, filename, inline
 
 
 class ApiError(Exception):
@@ -52,6 +52,7 @@ class Batch:
         return dict(r) if r else None
 
     def _acct(self, tbl, row):
+        if tbl == "inventory_items": return None   # its txn_id is only a link to the purchase; editing an item must not mark that account as edited
         if "account_id" in row: return row["account_id"]
         if "txn_id" not in row: return None  # categories, securities, prices...
         p = self.db.execute("SELECT account_id FROM transactions WHERE txn_id=?", (row["txn_id"],)).fetchone()

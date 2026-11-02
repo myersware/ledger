@@ -67,7 +67,7 @@ Stop it:
 
 Check it is running: `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8765/` prints `200`.
 
-Pages: `#/` accounts, `#/import`, `#/spending`, `#/networth`. `#/?showhidden` opens the account list with hidden accounts shown.
+Pages: `#/` accounts, `#/import`, `#/spending`, `#/networth`, `#/inventory`. `#/?showhidden` opens the account list with hidden accounts shown.
 
 ## Start automatically (optional, linux with systemd)
 Save as `~/.config/systemd/user/ledger.service` (`%h` is your home folder; change `WorkingDirectory` if the repo is elsewhere):

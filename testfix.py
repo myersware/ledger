@@ -102,6 +102,7 @@ def v5_copy(dest, ver=5):
     drop = ("dl_enabled", "dl_schedule") + (("acct_type", "tax_deferred", "single_fund", "institution", "acct_number", "customer_id", "contact_name", "phone", "url_home", "url_activity", "url_other", "comments", "tracking", "prefilled") if ver < 6 else ())
     for c in drop: d.execute(f"ALTER TABLE accounts DROP COLUMN {c}")
     d.execute("ALTER TABLE scheduled DROP COLUMN inv_json"); d.execute("ALTER TABLE import_map DROP COLUMN csv_map")  # v9 columns
+    d.execute("DROP TABLE inventory_items"); d.execute("DROP TABLE settings")  # v10 tables
     d.execute(f"PRAGMA user_version={ver}"); d.commit(); d.close()
 
 
