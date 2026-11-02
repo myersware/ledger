@@ -1,0 +1,8 @@
+data/
+imports/
+__pycache__/
+*.sqlite
+*.sqlite-journal
+data/plaid.json
+data/plaid_items.json
+.env

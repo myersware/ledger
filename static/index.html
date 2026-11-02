@@ -1,0 +1,436 @@
+<!doctype html><meta charset=utf-8><title>Ledger</title>
+<style>
+body{font:14px system-ui,sans-serif;margin:0;color:#222}header{background:#1f3a5f;color:#fff;padding:10px 16px}
+header a{color:#fff;text-decoration:none;font-weight:600}main{padding:12px 16px}
+table{border-collapse:collapse;width:100%}th,td{padding:3px 8px;border-bottom:1px solid #e3e3e3;text-align:left;vertical-align:top}
+th{background:#f3f5f8;position:sticky;top:0;cursor:pointer;white-space:nowrap}th.n,td.n{text-align:right;font-variant-numeric:tabular-nums}
+.neg{color:#b00020}.grp td{background:#e8eef6;font-weight:600}.stale{background:#fff4e0}.sp td{color:#555;background:#fafafa;font-size:13px}
+a{color:#1f5fbf}.m{color:#777;font-size:12px}input[type=search]{padding:4px 8px;width:260px}.tg{cursor:pointer;color:#1f5fbf}
+button{padding:3px 10px}tr.dim td,tr.dim a{opacity:.45}tr.dim td:last-child{opacity:1}dialog{border:1px solid #888;border-radius:6px;padding:14px;min-width:560px}dialog label{display:block;margin:4px 0}dialog input,dialog select{padding:3px}.err{color:#b00020;min-height:1.2em}.act a{margin-right:6px;cursor:pointer}
+#adlg{min-width:760px;background:#f4f6f9}#adlg h3{margin:0 0 8px;font-size:20px}#adlg .g{display:grid;grid-template-columns:150px 1fr 150px 1fr;gap:6px 8px;align-items:center;background:#fff;border:1px solid #bbb;padding:12px}
+#adlg .g>label{display:block;margin:0;text-align:right}#adlg input[type=text],#adlg select,#adlg textarea{width:100%;box-sizing:border-box}#adlg .u{display:flex;gap:4px}#adlg .u button{padding:2px 8px}
+#adlg fieldset{border:1px solid #888;margin:0;padding:6px 10px}#adlg fieldset label{margin:2px 0}#adlg .tabs{display:flex;gap:2px;margin-bottom:-1px}#adlg .tabs button{padding:4px 16px;border:1px solid #bbb;border-bottom:0;background:#e4e8ee;cursor:pointer}#adlg .tabs button.on{background:#fff;font-weight:bold}#adlg .dl{display:grid;grid-template-columns:170px 1fr;gap:8px;align-items:center;background:#fff;border:1px solid #bbb;padding:12px}#adlg .dl>label.k{text-align:right;margin:0}#adlg .dl .v{font-family:monospace}#adlg .bt{display:flex;gap:8px;margin-top:10px;align-items:center}#adlg .bt .sp{flex:1}.gear{cursor:pointer;color:#777;text-decoration:none;margin-left:4px}.gear:hover{color:#1f5fbf}
+</style>
+<header><a href="#/">Ledger</a> &nbsp; <a href="#/scheduled" style="font-weight:400">Scheduled</a> &nbsp; <a href="#/categories" style="font-weight:400">Categories</a> &nbsp; <a href="#/securities" style="font-weight:400">Securities</a> &nbsp; <a href="#/payees" style="font-weight:400">Payees</a> &nbsp; <a href="#/tags" style="font-weight:400">Tags</a> &nbsp; <a href="#/import" style="font-weight:400">Import</a> &nbsp; <a href="#/data" style="font-weight:400">Data</a> &nbsp; <a href="#/spending" style="font-weight:400">Spending</a> &nbsp; <a href="#/networth" style="font-weight:400">Net worth</a> &nbsp; <a href="#/portfolio" style="font-weight:400">Portfolio</a> <span class=m style="color:#bcd">local · read-only view of the working DB</span></header>
+<main id=app></main>
+<dialog id=dlg><form method=dialog id=frm onsubmit="return false">
+<h3 id=dt></h3><label id=f_sch style="display:none">Account <select id=s_acct></select> &nbsp; Repeats <select id=s_freq></select> &nbsp; Next date <input type=date id=s_next><br>Ends <input type=date id=s_end> or after <input id=s_cnt size=3> more times &nbsp; <select id=s_auto><option value=0>remind me<option value=1>enter automatically</select> &nbsp; <label style="display:inline"><input type=checkbox id=s_active> active</label></label><label id=f_l1>Date <input type=date id=f_date> &nbsp; Num <input id=f_num size=8> &nbsp; Cleared <select id=f_cl><option value="">-<option value=c>c<option value=R>R</select></label>
+<label>Payee <input id=f_payee size=40 list=payl> Memo <input id=f_memo size=30> <span id=f_tagw>Tag <input id=f_tag list=tagl size=12></span></label><datalist id=tagl></datalist><datalist id=payl></datalist>
+<label>Amount <input id=f_amt size=12 placeholder="-12.34 = payment"> <span id=simple>Category <input id=f_cat list=cats size=24> or Transfer to <select id=f_xf></select></span></label>
+<div><b>Splits</b> <span class=m>(optional; must sum to the amount; each line is a category or a transfer)</span> <button type=button onclick="addSplit()">+ split</button>
+<table id=spl></table></div><datalist id=cats></datalist>
+<p class=err id=err></p><button type=button id=save>Save</button> <button type=button onclick="dlg.close()">Cancel</button> <button type=button id=del style="float:right;color:#b00020">Delete</button></form></dialog>
+<dialog id=ndlg><form method=dialog onsubmit="return false"><h3>New account</h3>
+<label>Name <input id=n_name size=32></label><label>Type <select id=n_type onchange="nType()"></select></label>
+<label><span id=n_obl></span> <input id=n_ob size=12> as of <input type=date id=n_date></label><label id=n_clw>Credit limit <input id=n_cl size=10></label>
+<label>Institution <input id=n_inst size=22> &nbsp; Account no. <input id=n_num size=14></label>
+<p class=m id=n_help></p><p class=err id=n_err></p><button type=button onclick="nSave()">Create</button> <button type=button onclick="ndlg.close()">Cancel</button></form></dialog>
+<dialog id=idlg><form method=dialog onsubmit="return false">
+<h3 id=idt></h3><label>Date <input type=date id=i_date> &nbsp; Action <select id=i_act onchange="iAct()"></select> &nbsp; Cleared <span id=i_cl class=m></span></label>
+<label id=i_secl>Security <input id=i_sec list=secs size=36> <span class=m>(name or ticker)</span></label>
+<label><span id=i_qpl>Qty <input id=i_qty size=10> &nbsp; <span id=i_prl>Price <input id=i_price size=10> &nbsp;</span></span><span id=i_ratl>Split ratio new:old <input id=i_ratio size=8 placeholder="2:1"> &nbsp;</span><span id=i_aml><span id=i_amt_t>Amount</span> <input id=i_amt size=12 placeholder="positive; action sets direction"></span></label>
+<label id=i_acql>Acquired <input type=date id=i_acq> <span class=m>(optional: the date you originally bought them; sets the lot's age and long/short term)</span></label>
+<label>Payee <input id=i_payee size=30> Memo <input id=i_memo size=30></label>
+<label id=i_xl>Cash account (optional) <select id=i_xf></select> <span class=m>creates the matching bank-side transaction</span></label>
+<p class=m id=i_help></p><datalist id=secs></datalist>
+<p class=err id=ierr2></p><button type=button id=isave>Save</button> <button type=button onclick="idlg.close()">Cancel</button> <button type=button id=idel style="float:right;color:#b00020">Delete</button></form></dialog>
+<dialog id=xdlg><form method=dialog onsubmit="return false"><h3>Transfer shares to another investment account</h3>
+<label>From <b id=x_from></b> &nbsp; To <select id=x_to></select></label>
+<label>Security <input id=x_sec list=secs size=30> &nbsp; Shares <input id=x_qty size=10> &nbsp; Date <input type=date id=x_date></label>
+<label>Memo <input id=x_memo size=40></label>
+<p class=m>Lots move with their original purchase dates and cost (oldest lots first). Cash does not move; use Cash out / Cash in with a transfer account for that. Deleting either side of the transfer removes both.</p>
+<p class=err id=x_err></p><button type=button id=x_go>Transfer</button> <button type=button onclick="xdlg.close()">Cancel</button></form></dialog>
+<dialog id=cdlg><form method=dialog onsubmit="return false"><h3>Map csv columns</h3><div id=cd_body></div><p class=err id=cd_err></p><button type=button id=cd_save>Save mapping</button> <button type=button id=cd_clear>Clear</button> <button type=button onclick="cdlg.close()">Close</button></form></dialog>
+<dialog id=adlg><form method=dialog onsubmit="return false"><h3>Account Details</h3><div id=ab></div></form></dialog>
+<script>
+const $=document.getElementById('app'),f=n=>n==null?'':n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}),
+c=n=>n==null?'':`<span class="${n<0?'neg':''}">${f(n)}</span>`,e=s=>String(s??'').replace(/[&<>"]/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[x]));
+const TN={Bank:'Bank','CCard':'Credit cards',Cash:'Cash',Invst:'Investments','Oth A':'Other assets','Oth L':'Other liabilities',Port:'Portfolio'};
+let hideZero=true,showHidden=location.hash.includes('showhidden');
+async function accounts(){
+  const A=await (await fetch('/api/accounts')).json(),run=(await J('POST','/api/scheduled/run',{})).j,SD=run.entered?run:{entered:[],due:0,overdue:0};
+  const vis=A.filter(a=>showHidden||!a.hidden),nh=A.filter(a=>a.hidden).length,
+    show=vis.filter(a=>!hideZero||a.txn_count>0&&(Math.abs(a.balance)>=1||a.future));
+  let h=`<h2>Accounts</h2><p><button onclick="newAcct()">+ new account</button>`+(SD.entered.length?` <span style="background:#e6f4ea;padding:3px 8px">${SD.entered.length} scheduled item(s) entered automatically: <a href="#/scheduled">see</a></span>`:'')+(SD.due?` <a href="#/scheduled" style="background:#fff4e0;padding:3px 8px">${SD.due} scheduled transaction(s) due${SD.overdue?` (${SD.overdue} overdue)`:''}</a>`:'')+`</p>`+(A.length?'':`<div style="background:#f3f5f8;padding:12px;margin:8px 0"><b>No accounts yet.</b> Start with <a onclick="newAcct()">+ new account</a> (checking, savings, credit card, brokerage…). Then set up <a href="#/categories">categories</a>, and <a href="#/securities">securities</a> if you track investments. To bring in existing data, see <a href="#/import">Import</a>.</div>`)+`<label><input type=checkbox ${hideZero?'checked':''} onchange="hideZero=this.checked;route()"> hide empty / zero-balance (${vis.length-show.length} hidden)</label>
+  &nbsp; <label><input type=checkbox ${showHidden?'checked':''} onchange="showHidden=this.checked;route()"> show hidden accounts (${nh})</label>
+  <table><tr><th>Account<th class=n>Balance (today)<th class=n>Excl. stale<th class=n>OB-adjusted*<th class=n>Txns<th>Last txn`;
+  for(const t of Object.keys(TN)){const g=show.filter(a=>a.type===t);if(!g.length)continue;
+    h+=`<tr class=grp><td>${TN[t]}<td class=n>${c(g.reduce((s,a)=>s+a.balance,0)/100)}<td colspan=4>`;
+    for(const a of g)h+=`<tr class="${a.hidden?'dim':''}" ondblclick="adet(${a.account_id})"><td><a href="#/a/${a.account_id}">${e(a.name)}</a><a class=gear title="Account details" onclick="adet(${a.account_id})">⚙</a>${a.hidden?' <span class=m>(hidden)</span>':''}${a.inv?` <span class=m title="cash + securities at last price">(cash ${f(a.cash/100)} + sec ${f(a.securities/100)})</span>`:''}${a.future?` <span class=m>+${a.future} future</span>`:''}
+      <td class=n>${c(a.balance/100)}<td class=n>${a.stale_rows?c(a.balance_excl_stale/100):''}<td class=n>${a.balance_ob_adj==null?'':c(a.balance_ob_adj/100)}<td class=n>${a.txn_count}<td>${a.last_date||''}`;}
+  $.innerHTML=h+`</table><p class=m>*Opening balance replaced by the export's suggested end-anchor value (opening_balance_check); blank = not applicable. "Excl. stale" shown only where rows are flagged STALE?. Investment balance = inferred cash + securities at last price.</p>`;}
+const S={sort:'date',dir:'desc',q:'',off:0,hs:false,open:new Set()};
+async function reg(id){
+  const p=new URLSearchParams({sort:S.sort,dir:S.dir,q:S.q,offset:S.off,limit:200,hide_stale:S.hs?1:0});
+  const R=await (await fetch(`/api/accounts/${id}/register?${p}`)).json();if(R.error){$.textContent=R.error;return}
+  const inv=R.account.inv,H=(k,l,n)=>`<th class="${n?'n':''}" onclick="srt('${k}',${id})">${l}${S.sort===k?(S.dir==='asc'?' ▲':' ▼'):''}`;
+  let h=`<p><a href="#/">← Accounts</a></p><h2>${e(R.account.name)} <span class=m>${TN[R.account.type]||''}</span> <a class=gear title="Account details" onclick="adet(${id})" style="font-size:16px">⚙ details</a></h2>
+  <p><input type=search id=q placeholder="search payee, memo, category, amount…" value="${e(S.q)}" onkeydown="if(event.key=='Enter'){S.q=this.value;S.off=0;reg(${id})}">
+  <button onclick="S.q=document.getElementById('q').value;S.off=0;reg(${id})">Search</button>
+  <label><input type=checkbox ${S.hs?'checked':''} onchange="S.hs=this.checked;S.off=0;reg(${id})"> hide STALE? rows</label>
+  <button onclick="${inv?'iform':'form'}(${id})">+ Add ${inv?'investment ':''}transaction</button> ${inv?`<button onclick="xform(${id},'${e(R.account.name).replace(/'/g,"\\'")}')">Transfer shares…</button>`:''} ${inv?'':`<a href="#/rec/${id}">Reconcile…</a>`} <span class=m>${R.matched} of ${R.total} rows · register ${inv?'cash ':''}balance ${c(R.ending_balance)} (incl. future-dated)</span></p>
+  ${inv&&R.holdings?`<p class=m>Holdings: ${R.holdings.length?R.holdings.map(x=>e(x[0])+' <b>'+x[1]+'</b>').join(' · '):'none'}</p>`:''}
+  <table><tr>${H('date','Date')}${H('num',inv?'Action':'Num')}${H('payee','Payee')}${inv?H('security','Security'):''}${H('memo','Memo')}${H('category','Category / Transfer')}<th>Clr${inv?'<th class=n>Qty<th class=n>Price':''}${H('amount','Amount',1)}${H('balance',inv?'Cash bal':'Balance',1)}<th>`;ROWS={};
+  for(const r of R.rows){const n=r.splits.length,o=S.open.has(r.txn_id);
+    h+=`<tr class="${r.stale?'stale':''}" ${r.note?`title="${e(r.note)}"`:''}><td>${r.date}<td>${e(r.num)}<td>${e(r.payee)}${r.stale?' <b title="flagged STALE?">⚠</b>':''}${inv?`<td>${e(r.security)}`:''}<td>${e(r.memo)}
+      <td>${n?`<span class=tg onclick="tg(${r.txn_id},${id})">${o?'▾':'▸'} Split (${n})</span>`:e(r.transfer?'['+r.transfer+']':r.category)}${r.tag?` <span class=m>/${e(r.tag)}</span>`:''}<td>${r.cleared==='R'?'R':`<a class=tg title="click to toggle cleared" onclick="clr(${r.txn_id},'${r.cleared?'':'c'}',${id})">${r.cleared||'·'}</a>`}${inv?`<td class=n>${r.qty??''}<td class=n>${r.price??''}`:''}<td class=n>${c(r.amount)}<td class=n>${c(r.balance)}<td class=act>${r.locked?`<span class=m title="${e(r.locked)}">locked</span>`:`<a onclick="${inv?'iform':'form'}(${id},${r.txn_id})">edit</a>${inv?'':` <a title="make this a scheduled transaction" onclick="schThis(${id},${r.txn_id})">repeat</a>`}`}`;ROWS[r.txn_id]=r;
+    if(o)for(const s of r.splits)h+=`<tr class=sp><td colspan=${inv?5:4}><td>${e(s.transfer?'['+s.transfer+']':s.category)}${s.tag?' /'+e(s.tag):''} <span class=m>${e(s.memo)}</span><td colspan=${inv?3:1}><td class=n>${c(s.amount)}<td><td>`;}
+  h+=`</table><p>${S.off>0?`<button onclick="S.off-=200;reg(${id})">‹ Prev</button> `:''}Showing ${R.matched?S.off+1:0}–${Math.min(S.off+200,R.matched)} of ${R.matched} ${S.off+200<R.matched?`<button onclick="S.off+=200;reg(${id})">Next ›</button>`:''}</p>`;
+  $.innerHTML=h;}
+async function clr(t,v,id){const x=await fetch(`/api/transactions/${t}/cleared`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({cleared:v})}),j=await x.json();if(!x.ok)alert(j.error);reg(id)}
+const IH={Buy:'Cash decreases by the amount; shares increase.',Sell:'Cash increases; shares decrease.',Div:'Cash dividend: cash increases, no share change.',ReinvDiv:'Reinvested dividend: shares increase, cash unchanged.',ReinvInt:'Reinvested interest: shares increase, cash unchanged.',ReinvLg:'Reinvested long-term gain: shares increase, cash unchanged.',ReinvSh:'Reinvested short-term gain: shares increase, cash unchanged.',CGLong:'Long-term capital gain distribution: cash increases.',CGShort:'Short-term capital gain distribution: cash increases.',IntInc:'Interest: cash increases.',XIn:'Cash in: cash increases.',XOut:'Cash out: cash decreases.',MiscExp:'Fee / expense: cash decreases.',ShrsIn:'Shares added without cash (moved in, gift, grant). Enter the total cost basis and the date you originally acquired them.',ShrsOut:'Shares removed without cash (moved out, gift). The oldest lots go first.',StkSplit:'Stock split: shares are multiplied by the ratio (2:1 doubles; 1:10 is a reverse split). Cost stays the same.'};
+const IL={Buy:'Buy',Sell:'Sell',Div:'Dividend',ReinvDiv:'Reinvested dividend',ReinvInt:'Reinvested interest',ReinvLg:'Reinvested LT gain',ReinvSh:'Reinvested ST gain',CGLong:'LT capital gain',CGShort:'ST capital gain',IntInc:'Interest',XIn:'Cash in (transfer)',XOut:'Cash out (transfer)',MiscExp:'Fee / expense',ShrsIn:'Shares in',ShrsOut:'Shares out',StkSplit:'Stock split'};
+function iAct(){const a=i_act.value,q=['Buy','Sell','ReinvDiv','ReinvInt','ReinvLg','ReinvSh','ShrsIn','ShrsOut'].includes(a),sc=!['XIn','XOut'].includes(a);
+  i_qpl.style.display=q?'':'none';i_prl.style.display=a==='ShrsOut'?'none':'';i_ratl.style.display=a==='StkSplit'?'':'none';i_aml.style.display=['ShrsOut','StkSplit'].includes(a)?'none':'';i_amt_t.textContent=a==='ShrsIn'?'Total cost basis':'Amount';i_acql.style.display=a==='ShrsIn'?'':'none';
+  i_secl.style.display=sc?'':'none';i_xl.style.display=a==='XIn'||a==='XOut'?'':'none';i_help.textContent=(IH[a]||'')+(['Buy','Sell','ReinvDiv','ReinvInt','ReinvLg','ReinvSh'].includes(a)?' Amount = qty × price if left blank.':a==='ShrsIn'?' Leave cost blank if unknown (the lot shows "no basis").':'')}
+async function xform(aid,name){await meta();const o=META.accounts.filter(a=>a.inv&&a.id!==aid);if(!o.length){alert('Create a second investment account first.');return}
+  x_from.textContent=name;x_to.innerHTML=o.map(a=>`<option value=${a.id}>${e(a.name)}`).join('');secs.innerHTML=META.securities.map(x=>`<option value="${e(x.name)}">${e(x.symbol||'')}</option>`).join('');x_sec.value=x_qty.value=x_memo.value='';x_date.value=TODAY;x_err.textContent='';
+  x_go.onclick=async()=>{const r=await J('POST','/api/investments/transfer-shares',{from_account:aid,to_account:+x_to.value,security:x_sec.value,qty:x_qty.value,date:x_date.value,memo:x_memo.value});if(!r.ok){x_err.textContent=r.j.error;return}xdlg.close();reg(aid)};xdlg.showModal()}
+async function iform(aid,tid){
+  META=META||await (await fetch('/api/meta')).json();const r=tid?ROWS[tid]:{date:new Date().toISOString().slice(0,10),num:'Buy'},V=(i,v)=>document.getElementById(i).value=v??'';
+  secs.innerHTML=META.securities.map(x=>`<option value="${e(x.name)}">${e(x.symbol||'')}</option>`).join('');
+  i_act.innerHTML=META.inv_actions.map(a=>`<option value=${a}>${IL[a]||a}`).join('');
+  i_xf.innerHTML='<option value="">—'+[...new Set([...META.bank_accounts,...(r.transfer?[r.transfer]:[])])].map(a=>`<option>${e(a)}`).join('');
+  idt.textContent=tid?`Edit investment transaction #${tid}`:'New investment transaction';V('i_date',r.date);V('i_act',r.num);V('i_sec',r.security);V('i_qty',r.qty);V('i_price',r.price);V('i_amt',r.amount==null?'':Math.abs(r.amount));V('i_ratio',r.num==='StkSplit'&&r.qty!=null?+(r.qty/10).toFixed(6):'');V('i_acq',r.acquired);if(r.num==='StkSplit')V('i_qty','');
+  V('i_payee',r.payee);V('i_memo',r.memo);V('i_xf',r.transfer);i_cl.textContent=r.cleared||'-';ierr2.textContent=r.group?'This is part of a share transfer between accounts. It can only be deleted (both sides go together); enter the transfer again to change it.':'';isave.style.display=r.group?'none':'';idel.style.display=tid?'':'none';iAct();
+  const body=()=>({date:i_date.value,action:i_act.value,security:i_sec.value,qty:i_qty.value,price:i_price.value,amount:i_amt.value,ratio:i_ratio.value,acquired:i_acq.value,payee:i_payee.value,memo:i_memo.value,transfer:i_xf.value});
+  const go=async(url,m,b,done)=>{const x=await fetch(url,{method:m,headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}),j=await x.json();if(!x.ok){ierr2.textContent=j.error;return}if(j.warnings&&j.warnings.length)alert(j.warnings.join('\n'));idlg.close();reg(aid)};
+  isave.onclick=()=>go(tid?`/api/transactions/${tid}`:`/api/accounts/${aid}/transactions`,tid?'PUT':'POST',body());
+  idel.onclick=()=>{if(confirm('Delete this transaction'+(r.group?' and the whole share transfer (both accounts)':r.transfer?' and its matching transaction in '+r.transfer+' (if any)':'')+'?'))go(`/api/transactions/${tid}`,'DELETE',{})};
+  idlg.showModal()}
+let REC={date:new Date().toISOString().slice(0,10),bal:'',tick:new Set()};
+async function rec(id,reload){
+  const d=REC.date,x=await fetch(`/api/accounts/${id}/reconcile?date=${d}`),L=await x.json();if(L.error){$.textContent=L.error;return}
+  if(reload||REC.id!==id||REC.loaded!==d){REC.id=id;REC.loaded=d;REC.tick=new Set(L.rows.filter(r=>r.cleared).map(r=>r.txn_id))}
+  window.RL=L;const l=L.last;
+  let h=`<p><a href="#/a/${id}">← ${e(L.account)}</a></p><h2>Reconcile ${e(L.account)}</h2>
+  <p class=m>${L.reconciled_rows} rows already reconciled (R). ${l?`Last statement: <b>${l.date}</b>, balance <b>${f(l.balance)}</b> (${l.rows} rows, ${l.ts.replace('T',' ')}) <button onclick="recUndo(${id})">Undo last reconcile</button>`:'No reconcile recorded yet.'}</p>
+  <p>Statement end date <input type=date id=r_date value="${d}"> &nbsp; Ending balance <input id=r_bal size=12 value="${e(REC.bal)}" placeholder="e.g. 1234.56" oninput="REC.bal=this.value;recCalc()"> <button onclick="REC.date=r_date.value;rec(${id},true)">Load</button>
+  <span class=m>Use the register's sign: a credit card you owe is negative.</span></p>
+  <table><tr><th><input type=checkbox onchange="recAll(this.checked)" title="tick / untick all"><th>Date<th>Num<th>Payee<th>Memo<th>Clr<th class=n>Amount`;
+  for(const r of L.rows)h+=`<tr class="${r.stale?'stale':''}"><td><input type=checkbox class=rk data-id=${r.txn_id} ${REC.tick.has(r.txn_id)?'checked':''} onchange="recTick(${r.txn_id},this.checked)"><td>${r.date}<td>${e(r.num)}<td>${e(r.payee)}<td>${e(r.memo)}<td>${r.cleared?'c':''}<td class=n>${c(r.amount)}`;
+  h+=`</table><p id=rsum style="font-size:15px"></p><p><button id=rfin onclick="recFinish(${id})">Finish reconcile</button> <span class=err id=rerr></span></p>`;
+  $.innerHTML=h;recCalc()}
+function recTick(t,v){v?REC.tick.add(t):REC.tick.delete(t);recCalc()}
+function recAll(v){REC.tick=new Set(v?RL.rows.map(r=>r.txn_id):[]);document.querySelectorAll('.rk').forEach(k=>k.checked=v);recCalc()}
+function recCalc(){const k=x=>Math.round(x*100),begin=k(RL.beginning),sum=RL.rows.filter(r=>REC.tick.has(r.txn_id)).reduce((s,r)=>s+k(r.amount),0),
+  b=REC.bal.trim()===''||isNaN(+REC.bal)?null:k(+REC.bal),diff=b==null?null:b-(begin+sum);
+  rsum.innerHTML=`Beginning (reconciled) ${f(begin/100)} + ticked ${REC.tick.size} rows ${f(sum/100)} = <b>cleared balance ${f((begin+sum)/100)}</b> · statement ${b==null?'?':f(b/100)} · difference <b style="color:${diff===0?'#1b7f3b':'#b00020'}">${diff==null?'?':f(diff/100)}</b>`;
+  rfin.disabled=diff!==0}
+async function recFinish(id){rerr.textContent='';const x=await fetch(`/api/accounts/${id}/reconcile`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({statement_date:RL.date,statement_balance:REC.bal,cleared_ids:[...REC.tick]})}),j=await x.json();
+  if(!x.ok){rerr.textContent=j.error;return}REC.bal='';REC.id=null;alert(`Reconciled ${j.marked} rows to ${j.statement_date}, balance ${f(j.statement_balance)}.`);rec(id,true)}
+async function recUndo(id){if(!confirm('Undo the last reconcile (rows go back to their earlier cleared / uncleared status)?'))return;const x=await fetch(`/api/accounts/${id}/reconcile/undo`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}),j=await x.json();if(!x.ok){alert(j.error);return}REC.id=null;rec(id,true)}
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function rng(p){const n=new Date(),y=n.getFullYear(),m=n.getMonth();
+  return p==='this'?[iso(new Date(y,m,1)),iso(new Date(y,m+1,0))]:p==='last'?[iso(new Date(y,m-1,1)),iso(new Date(y,m,0))]:p==='ytd'?[iso(new Date(y,0,1)),iso(n)]:p==='lastyear'?[iso(new Date(y-1,0,1)),iso(new Date(y-1,11,31))]:
+  p==='1y'?[iso(new Date(y-1,m,n.getDate())),iso(n)]:p==='5y'?[iso(new Date(y-5,m,n.getDate())),iso(n)]:p==='10y'?[iso(new Date(y-10,m,n.getDate())),iso(n)]:p==='all'?['1990-01-01',iso(n)]:null}
+let SP={preset:'ytd',from:null,to:null,hidden:false,stale:false,open:new Set(),sel:null},CATS=[];
+async function spend(){
+  if(SP.preset!=='custom'||!SP.from){const r=rng(SP.preset)||[SP.from,SP.to];SP.from=r[0];SP.to=r[1]}
+  const qs=`from=${SP.from}&to=${SP.to}&hidden=${SP.hidden?1:0}&exclude_stale=${SP.stale?1:0}`,x=await fetch('/api/reports/spending?'+qs),R=await x.json();
+  if(R.error){$.innerHTML='<p class=err>'+e(R.error)+'</p>';return}
+  CATS=[];
+  const tree=(sec,total)=>{let h='';const walk=(n,d)=>{const i=CATS.push([n.name,sec])-1,kids=n.children.length,o=SP.open.has(sec+n.name);
+      h+=`<tr><td style="padding-left:${8+d*18}px">${kids?`<a class=tg onclick="spTog('${sec}',${i})">${o?'▾':'▸'}</a> `:'<span style="display:inline-block;width:12px"></span> '}<a class=tg onclick="drill(${i})">${e(n.label)}</a>${kids&&n.own?` <span class=m>(own ${f(n.own)})</span>`:''}<td class=n>${c(n.total)}<td class=n>${total?(100*n.total/total).toFixed(1)+'%':''}`;
+      if(kids&&o)n.children.forEach(k=>walk(k,d+1))};
+    R[sec].categories.forEach(n=>walk(n,0));return h||'<tr><td colspan=3 class=m>none'};
+  const lbl={this:'This month',last:'Last month',ytd:'Year to date',lastyear:'Last year',custom:'Custom'};
+  $.innerHTML=`<h2>Spending by category</h2><p>${Object.keys(lbl).map(k=>`<button ${SP.preset===k?'disabled':''} onclick="SP.preset='${k}';if(SP.preset!=='custom')SP.from=null;spend()">${lbl[k]}</button>`).join(' ')}
+  &nbsp; From <input type=date id=sp_f value="${SP.from}"> to <input type=date id=sp_t value="${SP.to}"> <button onclick="SP.preset='custom';SP.from=sp_f.value;SP.to=sp_t.value;spend()">Apply</button></p>
+  <p><label><input type=checkbox ${SP.hidden?'checked':''} onchange="SP.hidden=this.checked;spend()"> include hidden accounts</label> &nbsp; <label><input type=checkbox ${SP.stale?'checked':''} onchange="SP.stale=this.checked;spend()"> exclude STALE? rows</label></p>
+  <p style="font-size:16px"><b>${R.date_from} → ${R.date_to}</b> &nbsp; Income <b>${c(R.income.total)}</b> &nbsp; Expense <b>${c(R.expense.total)}</b> &nbsp; Net <b>${c(R.net)}</b></p>
+  <p class=m>Transfers, investment accounts and opening-balance rows are excluded; split transactions count each split line at its own amount; refunds reduce expense. Click a category for its transactions, ▸ to expand subcategories.</p>
+  <div style="display:flex;gap:24px;flex-wrap:wrap"><div style="flex:1;min-width:380px"><table><tr><th>Expense<th class=n>${f(R.expense.total)}<th class=n>%${tree('expense',R.expense.total)}</table></div>
+  <div style="flex:1;min-width:380px"><table><tr><th>Income<th class=n>${f(R.income.total)}<th class=n>%${tree('income',R.income.total)}</table></div></div><div id=drill></div>`;
+  if(SP.sel&&SP.sel.from===SP.from&&SP.sel.to===SP.to)drillShow(SP.sel.cat,SP.sel.sec)}
+function spTog(sec,i){const k=sec+CATS[i][0];SP.open.has(k)?SP.open.delete(k):SP.open.add(k);spend()}
+function drill(i){SP.sel={cat:CATS[i][0],sec:CATS[i][1],from:SP.from,to:SP.to};drillShow(CATS[i][0],CATS[i][1])}
+async function drillShow(cat,sec){const R=await (await fetch(`/api/reports/spending/transactions?category=${encodeURIComponent(cat)}&section=${sec}&from=${SP.from}&to=${SP.to}&hidden=${SP.hidden?1:0}&exclude_stale=${SP.stale?1:0}`)).json();
+  document.getElementById('drill').innerHTML=`<h3>${e(cat)} <span class=m>(${sec}, ${R.count} lines, total ${f(R.total)} as register amounts${R.truncated?', first 2000 shown':''})</span></h3><table><tr><th>Date<th>Account<th>Payee<th>Memo<th class=n>Amount`+
+  R.rows.map(r=>`<tr><td>${r.date}<td>${e(r.account)}<td>${e(r.payee)}<td>${e(r.memo)}${r.split?' <span class=m>(split)</span>':''}${r.category!==cat?` <span class=m>[${e(r.category)}]</span>`:''}<td class=n>${c(r.amount)}`).join('')+'</table>';
+  document.getElementById('drill').scrollIntoView()}
+let NW={preset:'10y',from:null,to:null,gran:'auto',hidden:false};
+async function networth(){
+  if(NW.preset!=='custom'||!NW.from){const r=rng(NW.preset)||[NW.from,NW.to];NW.from=r[0];NW.to=r[1]}
+  const R=await (await fetch(`/api/reports/networth?from=${NW.from}&to=${NW.to}&gran=${NW.gran}&hidden=${NW.hidden?1:0}`)).json();
+  if(R.error){$.innerHTML='<p class=err>'+e(R.error)+'</p>';return}
+  const P=R.points,W=900,H=300,L=70,B=24,T=10,Rt=10,ser=[['assets','#1b7f3b'],['liabilities','#b00020'],['net','#1f3a5f']],
+    all=P.flatMap(p=>[p.assets,p.liabilities,p.net,0]),mn=Math.min(...all),mx=Math.max(...all),sp=(mx-mn)||1,
+    X=i=>L+(P.length>1?i*(W-L-Rt)/(P.length-1):0),Y=v=>T+(mx-v)*(H-T-B)/sp,k=v=>Math.abs(v)>=1e6?(v/1e6).toFixed(1)+'M':Math.round(v/1e3)+'k';
+  let svg=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;border:1px solid #e3e3e3;background:#fff">`;
+  for(let t=0;t<=4;t++){const v=mn+sp*t/4,y=Y(v);svg+=`<line x1=${L} x2=${W-Rt} y1=${y} y2=${y} stroke="#eee"/><text x=${L-6} y=${y+4} font-size=11 text-anchor=end fill="#666">${k(v)}</text>`}
+  svg+=`<line x1=${L} x2=${W-Rt} y1=${Y(0)} y2=${Y(0)} stroke="#999"/>`;
+  const step=Math.max(1,Math.ceil(P.length/10));P.forEach((p,i)=>{if(i%step===0||i===P.length-1)svg+=`<text x=${X(i)} y=${H-8} font-size=11 text-anchor=middle fill="#666">${R.granularity==='year'&&i<P.length-1?p.date.slice(0,4):p.date.slice(0,7)}</text>`});
+  for(const [key,col] of ser){svg+=`<polyline fill=none stroke="${col}" stroke-width=${key==='net'?2.5:1.5} points="${P.map((p,i)=>X(i)+','+Y(p[key])).join(' ')}"/>`}
+  P.forEach((p,i)=>{svg+=`<circle cx=${X(i)} cy=${Y(p.net)} r=${P.length>80?1.5:3} fill="#1f3a5f"><title>${p.date}: net ${f(p.net)} (assets ${f(p.assets)}, liabilities ${f(p.liabilities)})</title></circle>`});
+  svg+='</svg>';
+  const types=R.types.filter(t=>P.some(p=>Math.abs(p.types[t]||0)>=0.005)),lbl={'1y':'1 year','5y':'5 years','10y':'10 years',all:'All',custom:'Custom'};
+  $.innerHTML=`<h2>Net worth</h2><p>${Object.keys(lbl).map(k=>`<button ${NW.preset===k?'disabled':''} onclick="NW.preset='${k}';if(NW.preset!=='custom')NW.from=null;networth()">${lbl[k]}</button>`).join(' ')}
+  &nbsp; From <input type=date id=nw_f value="${NW.from}"> to <input type=date id=nw_t value="${NW.to}"> <button onclick="NW.preset='custom';NW.from=nw_f.value;NW.to=nw_t.value;networth()">Apply</button>
+  &nbsp; <select onchange="NW.gran=this.value;networth()">${['auto','month','year'].map(g=>`<option ${NW.gran===g?'selected':''}>${g}`).join('')}</select> <span class=m>(${R.granularity})</span>
+  &nbsp; <label><input type=checkbox ${NW.hidden?'checked':''} onchange="NW.hidden=this.checked;networth()"> include hidden accounts</label></p>
+  <p style="font-size:16px">Latest (${P[P.length-1].date}): net worth <b>${c(P[P.length-1].net)}</b> = assets ${c(P[P.length-1].assets)} + liabilities ${c(P[P.length-1].liabilities)}</p>
+  <p class=m><span style="color:#1f3a5f">━ net worth</span> &nbsp; <span style="color:#1b7f3b">━ assets</span> &nbsp; <span style="color:#b00020">━ liabilities</span> &nbsp; Investments valued at the last price on or before each date; liabilities = credit cards + other liabilities (negative = owed).</p>${svg}
+  <table><tr><th>Date${types.map(t=>`<th class=n>${TN[t]||t}`).join('')}<th class=n>Assets<th class=n>Liabilities<th class=n>Net worth`+
+  [...P].reverse().map(p=>`<tr><td>${p.date}${types.map(t=>`<td class=n>${c(p.types[t]||0)}`).join('')}<td class=n>${c(p.assets)}<td class=n>${c(p.liabilities)}<td class=n><b>${c(p.net)}</b>`).join('')+'</table>'}
+let META;
+async function form(aid,tid){
+  f_l1.style.display='';f_sch.style.display='none';
+  META=META||await (await fetch('/api/meta')).json();const r=tid?ROWS[tid]:{date:new Date().toISOString().slice(0,10),splits:[]},me=(await (await fetch('/api/accounts')).json()).find(a=>a.account_id==aid).name;
+  const V=(i,v)=>document.getElementById(i).value=v??'';
+  cats.innerHTML=META.categories.map(c=>`<option value="${e(c)}">`).join('');
+  f_xf.innerHTML='<option value="">—'+META.accounts.filter(a=>(a.editable||a.inv)&&a.name!==me).map(a=>`<option>${e(a.name)}`).join('');
+  dt.textContent=tid?`Edit transaction #${tid}`:'New transaction';V('f_date',r.date);V('f_num',r.num);V('f_cl',r.cleared);V('f_payee',r.payee);V('f_memo',r.memo);V('f_tag',r.tag);V('f_amt',r.amount);f_tagw.style.display='';tagl.innerHTML=META.tags.map(t=>`<option value="${e(t)}">`).join('');
+  const sp=r.splits&&r.splits.length;V('f_cat',sp||r.category==='--Split--'?'':r.category);V('f_xf',r.transfer&&r.transfer!==me?r.transfer:'');
+  spl.innerHTML='';(r.splits||[]).forEach(s=>addSplit(s));err.textContent='';del.style.display=tid?'':'none';
+  const cp=r.link_id||(r.transfer&&r.transfer!==me);if(tid&&cp)del.title='Also deletes the other side of the transfer';
+  save.onclick=async()=>{const sl=[...spl.rows].map(t=>({category:t.querySelector('.sc').value,transfer:t.querySelector('.sx').value,memo:t.querySelector('.sm').value,amount:t.querySelector('.sa').value}));
+    const body={date:f_date.value,num:f_num.value,cleared:f_cl.value,payee:f_payee.value,memo:f_memo.value,tag:f_tag.value,amount:f_amt.value,category:f_cat.value,transfer:f_xf.value,splits:sl};
+    const x=await fetch(tid?`/api/transactions/${tid}`:`/api/accounts/${aid}/transactions`,{method:tid?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),j=await x.json();
+    if(!x.ok){err.textContent=j.error;return}if(j.warnings&&j.warnings.length)alert(j.warnings.join('\n'));dlg.close();reg(aid)};
+  del.onclick=async()=>{if(!confirm('Delete this transaction'+(cp?' and the other side of its transfer':'')+'?'))return;
+    const x=await fetch(`/api/transactions/${tid}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:'{}'}),j=await x.json();
+    if(!x.ok){err.textContent=j.error;return}if(j.warnings&&j.warnings.length)alert(j.warnings.join('\n'));dlg.close();reg(aid)};
+  dlg.showModal();}
+function addSplit(s){s=s||{};const t=spl.insertRow();t.innerHTML=`<td><input class=sc list=cats placeholder=category value="${e(s.category)}"><td><select class=sx>${f_xf.innerHTML}</select><td><input class=sm placeholder=memo value="${e(s.memo)}"><td><input class=sa size=10 placeholder=amount value="${s.amount??''}"><td><a onclick="this.closest('tr').remove()">✕</a>`;t.querySelector('.sx').value=s.transfer||''}
+function srt(k,id){S.dir=S.sort===k&&S.dir==='desc'?'asc':(S.sort===k?'desc':(k==='payee'||k==='memo'||k==='category'||k==='num'||k==='security'?'asc':'desc'));S.sort=k;S.off=0;reg(id)}
+function tg(t,id){S.open.has(t)?S.open.delete(t):S.open.add(t);reg(id)}
+const SC={new:'#1b7f3b',matched:'#8a6d00',duplicate:'#777',deferred:'#9a3b00','possible-match':'#9a3b00'};
+let impOpen=new Set();
+async function imp(){
+  const [P,M,B,meta,PL]=await Promise.all(['import/preview','import/mapping','import/batches','meta','plaid'].map(x=>fetch('/api/'+x).then(r=>r.json())));
+  const A=meta.accounts,unc=M.filter(m=>!m.confirmed).length,tot={new:0,matched:0,duplicate:0,deferred:0};
+  P.forEach(p=>{for(const k in tot)tot[k]+=p.counts[k]});
+  let h=`<h2>CSV import</h2><p class=m>Files in <code>imports/&lt;slug&gt;/</code>. Nothing is written until you press Import. New rows are added, matched rows (same amount, date ±3 days) only get the Plaid id attached, duplicates (id already imported) are skipped. One import = one reversible batch. Investment accounts: Plaid's paired rows (buy + cash) are collapsed into one transaction (reinvested dividend, dividend, cash out/in, buy, sell) and matched on ticker + quantity (or amount) within ±3 days; the counts below are in transactions, not file rows.</p>
+  ${plPanel(PL)}
+  <p><b>Totals:</b> ${Object.keys(tot).map(k=>`<span style="color:${SC[k]}">${tot[k]} ${k}</span>`).join(' · ')}</p>
+  <table><tr><th>Slug<th>Ledger account (mapping)<th>Account now<th class=n>New<th class=n>Matched<th class=n>Duplicate<th class=n>Deferred<th>`;
+  for(const p of P){const m=M.find(x=>x.slug===p.slug)||{},ai=p.account_info;
+    h+=`<tr><td><a class=tg onclick="impOpen.has('${p.slug}')?impOpen.delete('${p.slug}'):impOpen.add('${p.slug}');imp()">${p.slug}</a><br><span class=m>${p.files.length} file(s), ${p.counts.total} rows${p.counts.proposed!=null?' → '+p.counts.proposed+' transactions':''}</span>
+    <td><select onchange="impMap('${p.slug}',+this.value)"><option value="">(none)${A.map(a=>`<option value=${a.id} ${a.id===p.account_id?'selected':''}>${e(a.name)}`).join('')}</select> ${p.account_id?'':`<a class=tg onclick="impNew('${p.slug}')">create this account</a> `}${p.confirmed?'<span style="color:#1b7f3b">✓ confirmed</span>':'<b style="color:#b00020">unconfirmed</b>'} <a class=tg title="for generic bank csv files: which column is the date, payee, amount" onclick="csvMap('${p.slug}')">${m.csv?'✓ ':''}csv columns…</a>
+    <td class=m>${ai?`${ai.type} · balance ${f(ai.balance)} · last txn ${ai.last_date||'-'}`:''}${p.evidence?'<br>'+e(p.evidence):''}
+    <td class=n>${p.counts.new}<td class=n>${p.counts.matched}<td class=n>${p.counts.duplicate}<td class=n>${p.counts.deferred}<td>${p.confirmed||!p.account_id?'':`<button onclick="impMap('${p.slug}',${p.account_id})">Confirm</button>`}`;
+    if(p.warnings.length)h+=`<tr class=sp><td colspan=8>${p.warnings.map(w=>'⚠ '+e(w)).join('<br>')}`;
+    if(p.ledger_only&&p.ledger_only.length)h+=`<tr class=sp><td colspan=8>${p.ledger_only.length} ledger row(s) in the files' months have no file row: ${p.ledger_only.map(x=>`${x.date} ${f(x.amount)} ${e(x.payee||'')}`).join('; ')}`;
+    if(impOpen.has(p.slug)&&p.rows.length){h+=`<tr class=sp><td colspan=8><table><tr><th>Status<th>Date<th>Payee<th class=n>Amount<th>Memo<th>Proposed category<th>Plaid category<th>Match / note`;
+      for(const r of p.rows)h+=`<tr><td style="color:${SC[r.status]};font-weight:600">${r.status}<td>${r.date}<td>${e(r.payee)||'<span class=m>(blank)</span>'}${r.type?` <span class=m>${e(r.type)} ${e(r.security||'')} ${e(r.quantity||'')} @ ${e(r.price||'')}</span>`:''}<td class=n>${c(r.amount)}<td>${e(r.memo)}
+        <td>${r.category?e(r.category)+` <span class=m>(${r.category_source})</span>`:(r.status==='new'?'<span class=m>uncategorized</span>':'')}<td class=m>${e(r.plaid_category)}
+        <td class=m>${/^unknown security: /.test(r.reason||'')?`<a class=tg onclick="impSec('${e(r.reason.slice(18)).replace(/'/g,'')}')">create security ${e(r.reason.slice(18))}</a> `:''}${r.match?`↔ txn ${r.match.txn_id||r.match}${r.match.date?' '+r.match.date+' '+e(r.match.payee||''):''}`:(r.possible_match?`possible existing txn ${r.possible_match.txn_id} (${r.possible_match.date})`:'')}${r.reason?e(r.reason):''}${r.parts?` <br>from ${r.parts.map(p=>e(p.type)+' '+f(p.amount)).join(' + ')}`:''}`;
+      h+=`</table>`}}
+  h+=`</table><p>${unc?`<b style="color:#b00020">${unc} mapping(s) unconfirmed.</b> `:''}<button id=goimp ${tot.new+tot.matched&&!unc?'':'disabled'} onclick="impRun()">Import ${tot.new} new, link ${tot.matched} matched</button> <span class=err id=ierr></span></p>
+  <h3>Import batches</h3><table><tr><th>Batch<th>When<th class=n>Rows added<th class=n>Rows linked<th>`+(B.length?B.map(b=>`<tr><td>${b.batch}<td>${b.ts}<td class=n>${b.inserted}<td class=n>${b.linked}<td>${b.reverted?'<span class=m>reverted</span>':`<button onclick="impRevert('${b.batch}')">Revert</button>`}`).join(''):'<tr><td colspan=5 class=m>none yet')+'</table>';
+  $.innerHTML=h}
+async function impPost(u,b){const r=await fetch('/api/import/'+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}),j=await r.json();if(j.error){alert(j.error)}return j}
+async function impSec(sym){const x=await J('POST','/api/securities',{name:sym,symbol:sym.toUpperCase()});if(!x.ok){alert(x.j.error);return}META=null;imp()}
+async function impNew(slug){await newAcct(slug);n_name.value=slug.replace(/[-_]+/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}
+const CM_F=[['date','Date'],['payee','Payee / description'],['amount','Amount (one column)'],['debit','Debit (money out)'],['credit','Credit (money in)'],['memo','Memo']];
+async function csvMap(slug){const {ok,j}=await J('GET','/api/import/csv-columns?slug='+encodeURIComponent(slug));cd_err.textContent='';if(!ok){alert(j.error);return}
+  const F=j.files[0];if(!F){alert('no csv files in imports/'+slug+'/ yet');return}j.columns=F.columns;j.sample=F.sample;const m=j.map||{},o=v=>`<option value="">—${j.columns.map(c=>`<option ${c===v?'selected':''}>${e(c)}`).join('')}`;
+  cd_body.innerHTML=`<p class=m>${e(slug)}: the first csv file's columns. Use Amount, or Debit + Credit. Plaid downloads (with a transaction_id column) ignore this.</p><table>${CM_F.map(([k,l])=>`<tr><td>${l}<td><select id=cm_${k}>${o(m[k])}</select>`).join('')}<tr><td>Date format<td><select id=cm_fmt>${['auto','iso','mdy','dmy','ymd'].map(x=>`<option ${x===(m.date_format||'auto')?'selected':''}>${x}`).join('')}</select><tr><td>Flip sign<td><label style="display:inline"><input type=checkbox id=cm_neg ${m.negate?'checked':''}> amounts are shown positive for spending</label></table>
+  <table><tr>${j.columns.map(c=>`<th>${e(c)}`).join('')}${j.sample.map(rw=>`<tr>${j.columns.map(c=>`<td>${e(rw[c]||'')}`).join('')}`).join('')}</table>`;
+  cd_save.onclick=async()=>{const mp={date_format:cm_fmt.value,negate:cm_neg.checked};for(const[k]of CM_F)if(document.getElementById('cm_'+k).value)mp[k]=document.getElementById('cm_'+k).value;const x=await J('POST','/api/import/csv-map',{slug,map:mp});if(!x.ok){cd_err.textContent=x.j.error;return}cdlg.close();imp()};
+  cd_clear.onclick=async()=>{await J('POST','/api/import/csv-map',{slug,map:null});cdlg.close();imp()};cdlg.showModal()}
+async function impMap(slug,id){if(!id)return;await impPost('mapping',{mappings:[{slug,account_id:id}]});imp()}
+async function impRun(){if(!confirm('Import now? This writes to the working database (one batch, revertible).'))return;const j=await impPost('run',{});if(j.batch)alert('Imported as batch '+j.batch);imp()}
+async function impRevert(b){if(!confirm('Revert batch '+b+'?'))return;await impPost('revert',{batch:b});imp()}
+
+async function adet(id){
+  const x=await fetch(`/api/accounts/${id}/details`),D=await x.json();if(!x.ok){alert(D.error);return}
+  const PL=await fetch('/api/plaid').then(r=>r.json()),pa=PL.items.flatMap(i=>i.accounts.map(a=>({...a,item_id:i.item_id,inst:i.institution}))),pc=pa.find(a=>a.ledger_account_id===id);window.ADID=id;window.PLCUR=pc;
+  const inv=()=>(D.types.find(t=>t.label===ad_type.value)||{}).family==='Invst',U=D.usage,
+    yn=(k,v)=>`<label style="text-align:left"><input type=radio name=ad_${k} value=1 ${v===1?'checked':''}> Yes</label> <label style="text-align:left"><input type=radio name=ad_${k} value=0 ${v===0?'checked':''}> No</label>`,
+    T=(k,v,ph)=>`<input type=text id=ad_${k} value="${e(v)}" placeholder="${ph||''}" autocomplete=off>`,
+    UR=(k,v,ph)=>`<span class=u>${T(k,v,ph)}<button type=button onclick="adGo('ad_${k}')">Go</button></span>`,
+    fam=[...new Set(D.types.map(t=>t.family))],FN={Bank:'Banking',CCard:'Credit card',Cash:'Cash',Invst:'Investing','Oth A':'Property & debt','Oth L':'Property & debt'};
+  const cur=D.types.some(t=>t.label===D.acct_type);
+  const DL=D.download,sg=DL.slug||('none yet; \u201c'+e(D.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''))+'\u201d will be created when you turn downloads on');
+  ab.innerHTML=`<div class=tabs><button type=button id=adt_g class=on onclick="adTab('g')">General</button><button type=button id=adt_d onclick="adTab('d')">Download</button></div><div id=adp_g><div class=g>
+   <label>Account name</label>${T('name',D.name)}<label>Financial institution</label>${T('institution',D.institution)}
+   <label>Description</label>${T('description',D.description)}<label>Account number</label>${T('acct_number',D.acct_number,'last digits only, e.g. XXXXX627')}
+   <label>Account type</label><select id=ad_type ${D.type_locked?'disabled':''} onchange="adType()">${D.type_locked?`<option>${e(D.family)}`:D.types.map(t=>`<option ${t.label===D.acct_type?'selected':''}>${e(t.label)}`).join('')}</select><label>Customer ID</label>${T('customer_id',D.customer_id,'Not Available')}
+   <label class=iv>Tax deferred</label><span class=iv>${yn('tax_deferred',D.tax_deferred)}</span><label>Contact name</label>${T('contact_name',D.contact_name)}
+   <label class=iv>Single mutual fund account</label><span class=iv>${yn('single_fund',D.single_fund)}</span><label>Phone</label>${T('phone',D.phone)}
+   <label class=cl>Credit limit</label><span class=cl>${T('credit_limit',D.credit_limit==null?'':D.credit_limit)}</span><label>Home page</label>${UR('url_home',D.url_home,'Bank Web page')}
+   <fieldset class=iv style="grid-column:1/3;grid-row:span 2"><legend>Tracking Method</legend>
+     <label><input type=radio name=ad_tracking value=simple ${D.tracking==='simple'?'checked':''}> Simple - Positions Only</label>
+     <label><input type=radio name=ad_tracking value=complete ${D.tracking!=='simple'?'checked':''}> Complete - Positions and Transactions</label></fieldset>
+   <label>Activity page</label>${UR('url_activity',D.url_activity,'Activity Web page')}
+   <label>Other page</label>${UR('url_other',D.url_other,'Other Web page')}
+   <label style="align-self:start">Comments</label><textarea id=ad_comments rows=5 style="grid-column:2/5">${e(D.comments)}</textarea>
+  </div>
+  <p class=m id=ad_note>${D.guessed.length?`Ledger filled in <b>${D.guessed.map(k=>({acct_type:'type',institution:'institution',acct_number:'account number',tax_deferred:'tax deferred'}[k]||k)).join(', ')}</b> from the account's name; please check them. `:''}Description and credit limit come from the Quicken export. Tracking method is a note only; Ledger always records positions and transactions.</p>
+  <label><input type=checkbox id=ad_hidden ${D.hidden?'checked':''}> Hide this account (leave it out of the account list and reports)</label>
+  </div>
+  <div id=adp_d style="display:none"><div class=dl>
+   <label class=k>Downloads</label><label><input type=checkbox id=ad_dl_on ${DL.enabled?'checked':''}> Download new transactions for this account</label>
+   <label class=k>Schedule</label><span><label><input type=radio name=ad_dl_sched value=monthly ${DL.schedule!=='on demand'?'checked':''}> Monthly</label> <label><input type=radio name=ad_dl_sched value="on demand" ${DL.schedule==='on demand'?'checked':''}> On demand</label></span>
+   <label class=k>Import slug</label><span class=v>${DL.slug?e(DL.slug):sg}</span>
+   <label class=k>Folder</label><span class=v>${DL.folder?e(DL.folder):'-'}</span>
+   <label class=k>Latest file</label><span>${DL.latest_file?`<span class=v>${e(DL.latest_file)}</span> (${e(DL.latest_file_modified.replace('T',' '))})`:'none yet'}</span>
+   <label class=k>Last import</label><span>${DL.last_import?`${e(DL.last_import.ts.replace('T',' '))} (batch <span class=v>${e(DL.last_import.batch)}</span>)`:'none yet'}</span>
+  </div>
+  <div class=dl style="margin-top:10px"><label class=k>Plaid account</label><span><select id=ad_pl onchange="plMap()" ${PL.configured?'':'disabled'}><option value="">not linked (csv files from your assistant or by hand)</option>${pa.filter(a=>!a.ledger_account_id||a.ledger_account_id===id).map(a=>`<option value="${e(a.item_id)}|${e(a.plaid_account_id)}" ${pc&&a.plaid_account_id===pc.plaid_account_id?'selected':''}>${e(a.inst)}: ${e(a.name)}${a.mask?' \u2022\u2022'+e(a.mask):''} (${e(a.subtype||a.type)})</option>`).join('')}</select></span>
+   <label class=k>Link</label><span><button type=button onclick="plLink('bank')" ${PL.configured?'':'disabled'}>Link bank or card</button> <button type=button onclick="plLink('investments')" ${PL.configured?'':'disabled'}>Link brokerage</button></span>
+   <label class=k>Download</label><span><button type=button id=pl_go ${pc?'':'disabled'} onclick="plGo(${id})">Download now</button> <span id=pl_msg class=m></span></span></div>
+  <p class=m>${PL.configured?'':e(PL.problem)+' '}Download now (Plaid) only writes csv files to the folder above; you review and import them on the Import page. Without a linked Plaid account, your assistant (or a script) reads these settings with <span class=v>python3 app.py --download-list</span> and puts the files there. Monthly = included in the scheduled monthly pull; on demand = only when you ask for it. The file and import info is read-only.</p></div>
+  <p class=err id=ad_err></p>
+  <div class=bt><button type=button id=ad_del title="${e(U.delete_blocked||'Delete this empty account')}" onclick="adDel(${id})">Delete Account</button><span class=sp></span><button type=button id=ad_ok onclick="adSave(${id})"><b>OK</b></button><button type=button onclick="adlg.close()">Cancel</button></div>`;
+  window.AD=D;adType();adlg.showModal();ad_name.select()}
+function adTab(t){for(const k of 'gd'){document.getElementById('adp_'+k).style.display=k===t?'':'none';document.getElementById('adt_'+k).className=k===t?'on':''}}
+function adType(){const t=(AD.types.find(t=>t.label===ad_type.value)||{family:AD.family}).family,iv=t==='Invst';
+  document.querySelectorAll('#adlg .iv').forEach(n=>n.style.visibility=iv?'visible':'hidden');
+  document.querySelectorAll('#adlg .cl').forEach(n=>n.style.visibility=t==='CCard'||AD.credit_limit?'visible':'hidden');
+  const chg=t!==AD.family&&!AD.type_locked;ad_err.textContent=chg?(AD.usage.txns&&(iv||AD.family==='Invst')?'Can\u2019t switch between investment and non-investment types on an account with transactions.':`Changing the type moves this account to ${FN2[t]||t}; its balance doesn\u2019t change.`):'';}
+const FN2={Bank:'Banking',CCard:'Credit cards',Cash:'Cash','Oth A':'Other assets','Oth L':'Other liabilities',Invst:'Investments'};
+function adGo(i){let v=document.getElementById(i).value.trim();if(!v)return;if(!/^[a-z][a-z0-9+.-]*:/i.test(v))v='https://'+v;if(!/^https?:\/\//i.test(v)){alert('Only web addresses (http/https) can be opened');return}window.open(v,'_blank','noopener')}
+async function adSave(id){
+  const r=k=>{const n=document.querySelector(`input[name=ad_${k}]:checked`);return n?+n.value===1:null},V=i=>document.getElementById(i).value,
+    b={name:V('ad_name'),description:V('ad_description'),institution:V('ad_institution'),acct_number:V('ad_acct_number'),customer_id:V('ad_customer_id'),contact_name:V('ad_contact_name'),phone:V('ad_phone'),
+       url_home:V('ad_url_home'),url_activity:V('ad_url_activity'),url_other:V('ad_url_other'),comments:V('ad_comments'),hidden:ad_hidden.checked,dl_enabled:ad_dl_on.checked,dl_schedule:document.querySelector('input[name=ad_dl_sched]:checked').value};
+  if(!AD.type_locked)b.acct_type=ad_type.value;
+  if(document.querySelector('#adlg .iv').style.visibility!=='hidden'){b.tax_deferred=r('tax_deferred');b.single_fund=r('single_fund');b.tracking=document.querySelector('input[name=ad_tracking]:checked').value}
+  if(document.querySelector('#adlg .cl').style.visibility!=='hidden')b.credit_limit=V('ad_credit_limit');
+  const x=await fetch(`/api/accounts/${id}/details`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}),j=await x.json();
+  if(!x.ok){ad_err.textContent=j.error;return}adlg.close();route()}
+async function adDel(id){
+  if(!AD.usage.can_delete){ad_err.textContent=AD.usage.delete_blocked;return}
+  if(!confirm(`Delete the empty account "${AD.name}"? (It can be undone from the edit log.)`))return;
+  const x=await fetch(`/api/accounts/${id}`,{method:'DELETE',headers:{'Content-Type':'application/json'},body:'{}'}),j=await x.json();
+  if(!x.ok){ad_err.textContent=j.error;return}adlg.close();location.hash='#/';route()}
+function plText(r){const t=[];for(const o of r.items){if(o.error)t.push(`${o.institution||'bank'}: ${o.error}`);for(const s in o.slugs){const c=(o.preview||{})[s]||{};t.push(`${s}: ${o.slugs[s]} row(s) written; preview: ${c.new||0} new, ${c.matched||0} matched, ${c.duplicate||0} duplicate, ${c.deferred||0} deferred`)}t.push(...o.warnings)}
+  if(r.skipped_not_linked.length)t.push('not linked to Plaid, skipped: '+r.skipped_not_linked.join(', '));return t.length?t:['nothing to download']}
+async function plPost(u,b){const r=await fetch('/api/plaid/'+u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}),j=await r.json();if(!r.ok){alert(j.error);return null}return j}
+function plDone(){if(adlg.open){adlg.close();adet(ADID).then(()=>adTab('d'))}else route()}
+async function plCreate(item,pid){const j=await plPost('create_account',{item_id:item,plaid_account_id:pid});if(!j)return;META=null;alert(`created "${j.name}" (${j.type}) and linked it. set its opening balance in Account Details.`);route()}
+async function plLink(kind,item){const j=await plPost('link_token',{kind,item_id:item});if(!j)return;
+  if(!window.Plaid){try{await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.plaid.com/link/v2/stable/link-initialize.js';s.onload=ok;s.onerror=()=>no();document.head.appendChild(s)})}catch(x){alert('Could not load Plaid Link from cdn.plaid.com');return}}
+  Plaid.create({token:j.link_token,onSuccess:async(pt,md)=>{if(!item){const x=await plPost('exchange',{public_token:pt,institution:md&&md.institution&&md.institution.name});if(!x)return;alert(`Linked ${x.accounts} account(s). Pick which ledger account each one feeds (Account Details > Download > Plaid account).`)}plDone()},onExit:()=>{}}).open()}
+async function plMap(){const v=ad_pl.value.split('|'),c=window.PLCUR;let b;
+  if(v[0])b={item_id:v[0],plaid_account_id:v[1],account_id:ADID};else if(c)b={item_id:c.item_id,plaid_account_id:c.plaid_account_id,account_id:null};else return;
+  await plPost('map',b);plDone()}
+async function plGo(id){pl_go.disabled=true;pl_msg.textContent='downloading...';const r=await plPost('sync',{account_id:id});pl_go.disabled=false;pl_msg.innerHTML=r?plText(r).map(e).join('<br>')+' <a href="#/import" onclick="adlg.close()">Review on the Import page</a>':''}
+async function plAll(){const b=document.getElementById('pl_all');b.disabled=true;b.textContent='downloading...';const r=await plPost('sync',{all:true});if(r)alert(plText(r).join('\n')+'\n\nNothing is imported yet. Review the preview below.');imp()}
+async function plRm(i){if(!confirm('Unlink this bank from Plaid? (Your ledger and csv files are not changed.)'))return;if(await plPost('remove',{item_id:i}))imp()}
+function plPanel(PL){if(!PL.configured)return `<p class=m><b>Plaid downloads:</b> ${e(PL.problem)}</p>`;
+  return `<p><b>Plaid downloads</b> (${e(PL.env)}) <button type=button onclick="plLink('bank')">Link bank or card</button> <button type=button onclick="plLink('investments')">Link brokerage</button> <button type=button id=pl_all onclick="plAll()" ${PL.items.length?'':'disabled'}>Download all</button><br><span class=m>`+
+   (PL.items.map(i=>`${e(i.institution||'bank')}: ${i.accounts.filter(a=>a.ledger_account_id).length}/${i.accounts.length} account(s) linked${i.last_sync?', last download '+e(i.last_sync.replace('T',' ')):''}${i.accounts.filter(a=>!a.ledger_account_id).map(a=>` <a class=tg title="creates a ledger account named after it and links it; set the opening balance in Account Details" onclick="plCreate('${e(i.item_id)}','${e(a.plaid_account_id)}')">create ledger account for ${e(a.name)}${a.mask?' ...'+e(a.mask):''}</a>`).join('')}${i.error?` <span class=err>${e(i.error)}</span> <button type=button onclick="plLink('bank','${e(i.item_id)}')">Log in again</button>`:''} <a class=tg onclick="plRm('${e(i.item_id)}')">unlink</a>`).join('<br>')||'No bank linked yet.')+`<br>Download all covers linked accounts that have downloads turned on. Downloads only write csv files; nothing enters the ledger until you press Import.</span></p>`}
+let PF={group:'security',hidden:false,sort:'value',dir:'desc',open:new Set(),all:false},PD=null;
+function pfs(k){PF.dir=PF.sort===k?(PF.dir==='desc'?'asc':'desc'):(k==='name'?'asc':'desc');PF.sort=k;port(false)}
+function pfx(on){PF.all=on;PF.open=new Set();port(false)}
+function pft(k){PF.open[PF.open.has(k)?'delete':'add'](k);port(false)}
+async function port(reload=true){
+  if(reload||!PD)PD=await (await fetch(`/api/portfolio?group=${PF.group}&hidden=${PF.hidden?1:0}`)).json();
+  const R=PD,T=R.totals,k=PF.sort,cmp=(a,b)=>{const x=a[k],y=b[k];return(typeof x==='string'||typeof y==='string'?String(x??'').localeCompare(String(y??'')):(x??-Infinity)-(y??-Infinity))*(PF.dir==='asc'?1:-1)},
+  p1=n=>n==null?'':f(n)+'%',sh=n=>n==null?'':n.toLocaleString('en-US',{maximumFractionDigits:6}),
+  H=(key,l,n)=>`<th class="${n?'n':''}" onclick="pfs('${key}')">${l}${PF.sort===key?(PF.dir==='asc'?' ▲':' ▼'):''}</th>`,
+  line=r=>{const o=PF.all!==PF.open.has(r.key),w=[r.stale?`price is ${r.price_date} (over 7 days old)`:'',r.no_price?'no price in the data, value counted as 0':'',r.short?'negative position, no lots':'',r.nocost_lots?r.nocost_lots+' lot(s) have no cost in the data (counted as 0)':''].filter(Boolean);
+    let h=`<tr class="${r.stale||r.no_price?'stale':''}"><td>${r.lots.length?`<a class=tg data-k="${e(r.key)}" onclick="pft(this.dataset.k)">${o?'▾':'▸'}</a> `:'<span style="display:inline-block;width:12px"></span> '}${e(r.name)} <span class=m>${e(r.symbol||'')}${PF.group==='security'&&r.accounts.length>1?' · '+r.accounts.length+' accounts':''}</span>${w.length?` <b title="${e(w.join('; '))}">⚠</b>`:''}
+      <td class=n>${sh(r.shares)}<td class=n>${r.price==null?'':f(r.price)} <span class=m>${r.price_date||''}</span><td class=n>${c(r.value)}<td class=n>${c(r.cost)}<td class=n>${c(r.gain)}<td class=n>${c(r.gain_pct)}<td class=n>${p1(r.pct)}`;
+    if(o){h+=`<tr class=sp><th>Lot (account)<th class=n>Shares<th class=n>Cost/share<th class=n>Basis<th class=n>Value<th class=n>Gain<th>Acquired<th>Held`;
+      for(const l of r.lots)h+=`<tr class=sp><td>${e(l.account)}<td class=n>${sh(l.shares)}<td class=n>${l.cost_per_share==null?'—':f(l.cost_per_share)}<td class=n>${l.nocost?'—':c(l.cost)}<td class=n>${c(l.value)}<td class=n>${c(l.gain)}<td>${l.date}<td>${l.term}`}
+    return h};
+  let h=`<h2>Portfolio <span class=m>as of ${R.as_of}</span></h2><p>Group by <select onchange="PF.group=this.value;port()"><option value=security ${PF.group==='security'?'selected':''}>security<option value=account ${PF.group==='account'?'selected':''}>account</select>
+    &nbsp; <label><input type=checkbox ${PF.hidden?'checked':''} onchange="PF.hidden=this.checked;port()"> show hidden accounts</label> &nbsp; <button onclick="pfx(true)">expand all lots</button> <button onclick="pfx(false)">collapse all</button></p>
+  <table><tr>${H('name','Security')}${H('shares','Shares',1)}${H('price','Price',1)}${H('value','Market value',1)}${H('cost','Cost basis',1)}${H('gain','Gain / loss',1)}${H('gain_pct','%',1)}${H('pct','% of portfolio',1)}`;
+  if(R.groups)for(const g of R.groups){const gv=g.rows.reduce((s,r)=>s+(r.value||0),0);h+=`<tr class=grp><td>${e(g.account)}${g.hidden?' (hidden)':''}<td><td><td class=n>${c(gv+g.cash)}<td colspan=4>`;h+=[...g.rows].sort(cmp).map(line).join('');h+=`<tr><td class=m>&nbsp;&nbsp;Cash<td><td><td class=n>${c(g.cash)}<td colspan=4>`}
+  else{h+=[...R.rows].sort(cmp).map(line).join('');for(const x of R.cash)h+=`<tr><td class=m>Cash · ${e(x.account)}<td><td><td class=n>${c(x.amount)}<td><td><td><td class=n>${p1(x.pct)}`}
+  h+=`<tr class=grp><td>Total<td><td><td class=n>${c(T.value)}<td class=n>${c(T.cost)}<td class=n>${c(T.gain)}<td class=n>${c(T.gain_pct)}<td class=n>100.00%</table>
+  <p class=m>Total = securities ${f(T.securities)} + cash ${f(T.cash)}. Cost and gain cover securities only. ${T.stale?T.stale+' price(s) older than 7 days (⚠). ':''}${T.unpriced?T.unpriced+' holding(s) have no price (value 0). ':''}
+  Lots are built oldest-first from the transactions; shares moved in from another account carry the transfer date. Held = short (≤ 1 year) or long by date only.</p>`;
+  $.innerHTML=h}
+const J=(m,u,b)=>fetch(u,{method:m,headers:{'Content-Type':'application/json'},body:b===undefined?undefined:JSON.stringify(b)}).then(async x=>{const j=await x.json().catch(()=>({}));return{ok:x.ok,j}}),
+TODAY=new Date().toISOString().slice(0,10),meta=async()=>META=META||await (await fetch('/api/meta')).json();
+// new account
+let NEWMAP=null;
+async function newAcct(slug){NEWMAP=slug||null;await meta();n_type.innerHTML=META.types.map(t=>`<option>${e(t.label)}`).join('');n_name.value=n_ob.value=n_inst.value=n_num.value=n_cl.value='';n_date.value=TODAY;n_err.textContent='';nType();ndlg.showModal()}
+function nType(){const fm=(META.types.find(t=>t.label===n_type.value)||{}).family,l=fm==='CCard'||fm==='Oth L';
+  n_obl.textContent=l?'Amount owed today':fm==='Invst'?'Opening cash':'Opening balance';n_clw.style.display=fm==='CCard'?'':'none';
+  n_help.textContent=fm==='Invst'?'Cash only; add holdings afterwards with Buy or ShrsIn-style transactions (Securities page first).':'Optional. Creates one "Opening Balance" transaction on that date; leave blank to start at zero.'}
+async function nSave(){const{ok,j}=await J('POST','/api/accounts',{name:n_name.value,type:n_type.value,opening_balance:n_ob.value,opening_date:n_date.value,credit_limit:n_cl.value,institution:n_inst.value,acct_number:n_num.value});
+  if(!ok){n_err.textContent=j.error;return}META=null;hideZero=false;ndlg.close();if(NEWMAP){const sl=NEWMAP;NEWMAP=null;await impPost('mapping',{mappings:[{slug:sl,account_id:j.account_id}]});location.hash='#/import';route();return}location.hash='#/a/'+j.account_id;route()}
+// categories
+let CT=[];
+const sortKey=n=>n.replaceAll(':','\u0001').toLowerCase();
+async function cats_(msg){const R=await (await fetch('/api/categories')).json();CT=R.categories.sort((a,b)=>sortKey(a.name)<sortKey(b.name)?-1:1);
+  let h=`<p><a href="#/">← Accounts</a></p><h2>Categories</h2>${msg?`<p class=m>${e(msg)}</p>`:''}`;
+  if(R.starter_offered)h+=`<p><b>No categories yet.</b> <button onclick="catStarter()">Add the starter list</button> <span class=m>a small generic US household list (income, housing, groceries, utilities…); rename or delete anything afterwards</span></p>`;
+  h+=`<p><input id=c_name placeholder="name, or Parent:Child" size=30> <select id=c_kind><option value=expense>Expense<option value=income>Income</select> <button onclick="catAdd()">Add</button> <span class=err id=c_err></span></p>
+  <table><tr><th>Category<th>Type<th class=n>Used<th>`;
+  CT.forEach((x,i)=>h+=`<tr><td style="padding-left:${8+16*(x.name.split(':').length-1)}px">${e(x.name.split(':').pop())}<td>${x.kind}<td class=n>${x.used||''}${x.children?` <span class=m>(${x.children} sub)</span>`:''}<td><a onclick="catRen(${i})">rename</a> &nbsp; <a onclick="catDel(${i})">delete</a>`);
+  $.innerHTML=h+'</table><p class=m>Renaming a category renames its subcategories and every transaction, split, memorized and scheduled item that uses it. A category in use can\'t be deleted. Every change is logged and can be undone with <code>app.py --revert &lt;batch&gt;</code>.</p>'}
+const cats$=()=>cats_(),catFail=r=>{if(!r.ok){alert(r.j.error);return true}META=null};
+async function catAdd(){const r=await J('POST','/api/categories',{name:c_name.value,kind:c_kind.value});if(!r.ok){c_err.textContent=r.j.error;return}META=null;cats_()}
+async function catStarter(){const r=await J('POST','/api/categories/starter',{});if(catFail(r))return;cats_(`added ${r.j.added} categories`)}
+async function catRen(i){const x=CT[i],n=prompt('New name (Parent:Child form)',x.name);if(!n||n===x.name)return;const r=await J('PUT','/api/categories/'+x.id,{name:n});if(catFail(r))return;cats_()}
+async function catDel(i){const x=CT[i];if(!confirm(`Delete category ${x.name}?`))return;const r=await J('DELETE','/api/categories/'+x.id,{});if(catFail(r))return;cats_()}
+// securities and prices
+let SE=[],SPX=null;
+async function secs_(){const R=await (await fetch('/api/securities')).json();SE=R.securities||R;
+  let h=`<p><a href="#/">← Accounts</a></p><h2>Securities</h2>
+  <p><input id=s_name placeholder="name" size=28> <input id=s_tick placeholder="ticker" size=8> <input id=s_type list=stypes placeholder="type" size=12><datalist id=stypes><option>Stock<option>Mutual Fund<option>ETF<option>Bond<option>CD<option>Other</datalist> <button onclick="secAdd()">Add</button> <span class=err id=s_err></span></p>
+  <table><tr><th>Name<th>Ticker<th>Type<th class=n>Last price<th>As of<th class=n>Used<th>`;
+  SE.forEach((x,i)=>h+=`<tr><td>${e(x.name)}<td>${e(x.symbol)}<td>${e(x.type)}<td class=n>${x.price==null?'':f(x.price)}<td>${x.price_date||''}<td class=n>${x.used||''}<td><a onclick="secPrices(${x.id})">prices (${x.prices||0})</a> &nbsp; <a onclick="secEdit(${i})">edit</a> &nbsp; <a onclick="secDel(${i})">delete</a>`);
+  h+='</table><div id=spx></div><p class=m>A security that has transactions can\'t be deleted. A Buy or Sell with a price also records that price (unless a newer one exists).</p>';$.innerHTML=h;if(SPX)secPrices(SPX)}
+async function secAdd(){const r=await J('POST','/api/securities',{name:s_name.value,symbol:s_tick.value,type:s_type.value});if(!r.ok){s_err.textContent=r.j.error;return}META=null;secs_()}
+async function secEdit(i){const x=SE[i],n=prompt('Name',x.name);if(n==null)return;const t=prompt('Ticker',x.symbol);if(t==null)return;const ty=prompt('Type',x.type||'');if(ty==null)return;
+  const r=await J('PUT','/api/securities/'+x.id,{name:n,symbol:t,type:ty});if(!r.ok){alert(r.j.error);return}META=null;secs_()}
+async function secDel(i){const x=SE[i];if(!confirm(`Delete ${x.name}${x.prices?` and its ${x.prices} prices`:''}?`))return;const r=await J('DELETE','/api/securities/'+x.id,{});if(!r.ok){alert(r.j.error);return}META=null;if(SPX==x.id)SPX=null;secs_()}
+async function secPrices(id){SPX=id;const s=SE.find(x=>x.id==id),R=await (await fetch(`/api/securities/${id}/prices`)).json(),P=R.prices||R;
+  spx.innerHTML=`<h3>Prices: ${e(s.name)} (${e(s.symbol)})</h3><p><input type=date id=p_date value="${TODAY}"> <input id=p_val size=10 placeholder="price"> <button onclick="priceAdd(${id})">Set price</button> <span class=err id=p_err></span> <a onclick="SPX=null;spx.innerHTML=''">close</a></p>
+  <table style="width:auto"><tr><th>Date<th class=n>Price<th>Source<th>`+P.slice(0,40).map(p=>`<tr><td>${p.date}<td class=n>${f(p.price)}<td>${e(p.source||'')}<td><a onclick="priceDel(${p.price_id},${id})">delete</a>`).join('')+`</table>${P.length>40?`<p class=m>latest 40 of ${P.length}</p>`:''}`}
+async function priceAdd(id){const r=await J('POST','/api/prices',{security_id:id,date:p_date.value,price:p_val.value});if(!r.ok){p_err.textContent=r.j.error;return}secs_()}
+async function priceDel(pid,id){const r=await J('DELETE','/api/prices/'+pid,{});if(!r.ok){alert(r.j.error);return}secs_()}
+// scheduled
+let SCH=[],SHOW_ALL=false;
+const FL={once:'once',weekly:'weekly',biweekly:'every 2 weeks',monthly:'monthly',quarterly:'quarterly',yearly:'yearly'};
+async function sched(){const run=(await J('POST','/api/scheduled/run',{})).j,R=await (await fetch('/api/scheduled?all='+(SHOW_ALL?1:0))).json();SCH=R.items;
+  let h=`<p><a href="#/">← Accounts</a></p><h2>Scheduled transactions</h2>`;
+  if(run.entered&&run.entered.length)h+=`<p style="background:#e6f4ea;padding:6px 10px">Entered automatically just now: ${run.entered.map(x=>e(x.date+' '+x.account+' '+(x.payee||'')+' '+f(x.amount))).join('; ')}</p>`;
+  if(run.errors&&run.errors.length)h+=`<p class=err>${run.errors.map(x=>e(x.error||x)).join('<br>')}</p>`;
+  h+=`<p><button onclick="sform()">+ New schedule</button> <label><input type=checkbox ${SHOW_ALL?'checked':''} onchange="SHOW_ALL=this.checked;sched()"> show everything (not just the next ${R.days} days) and ended items</label> <span class=m>today ${R.today}; ${R.due} due or overdue</span></p>
+  <table><tr><th>Next<th>Status<th>Account<th>Payee<th>Category / transfer<th class=n>Amount<th>Repeats<th>Mode<th>`;
+  SCH.forEach((x,i)=>h+=`<tr><td>${x.next_date}<td style="color:${x.status==='overdue'?'#b00020':x.status==='due'?'#9a3b00':'#555'}">${x.status}<td>${e(x.account)}<td>${e(x.payee)}<td>${e(x.inv?x.inv.action+' '+(x.inv.security||'')+(x.inv.qty?' '+x.inv.qty:''):x.splits.length?'Split ('+x.splits.length+')':x.transfer?'['+x.transfer+']':x.category)}<td class=n>${c(x.amount)}<td>${FL[x.freq]||x.freq}${x.end_date?` until ${x.end_date}`:''}${x.count!=null?` · ${x.count} left`:''}<td>${x.auto?'auto':'remind'}<td>${x.status==='ended'?'':`<a onclick="schEnter(${i})">enter</a> &nbsp; <a onclick="schSkip(${i})">skip</a> &nbsp; `}${x.inv?'':`<a onclick="sform(${i})">edit</a> &nbsp; `}<a onclick="schDel(${i})">delete</a>`);
+  if(!SCH.length)h+='<tr><td colspan=9 class=m>Nothing scheduled. Use "+ New schedule", or the "repeat" link on any bank-register row.';
+  h+='</table>';
+  if(R.recent&&R.recent.length)h+=`<h3>Recently entered</h3><table style="width:auto"><tr><th>When<th>Batch<th>Entered`+R.recent.map(x=>`<tr><td>${e(x.ts)}<td class=m>${e(x.batch)}<td>${e(x.date+' '+x.account+' '+x.payee+' '+f(x.amount))}${x.auto?' (auto)':''}`).join('')+`</table><p class=m>Undo an entry: <code>python3 app.py --revert &lt;batch&gt;</code> (or delete the transaction in its register).</p>`;
+  $.innerHTML=h}
+async function schEnter(i){const x=SCH[i];let b={};if(!x.splits.length&&!x.inv){const a=prompt(`Enter ${x.payee||'this item'} on ${x.next_date}. Amount (edit if it differs):`,x.amount);if(a==null)return;if(+a!==x.amount)b.amount=a}else if(!confirm('Enter this split transaction on '+x.next_date+'?'))return;
+  const r=await J('POST',`/api/scheduled/${x.id}/enter`,b);if(!r.ok){alert(r.j.error);return}sched()}
+async function schSkip(i){const x=SCH[i];if(!confirm(`Skip ${x.payee||'this item'} on ${x.next_date} (nothing is entered)?`))return;const r=await J('POST',`/api/scheduled/${x.id}/skip`,{});if(!r.ok){alert(r.j.error);return}sched()}
+async function schDel(i){const x=SCH[i];if(!confirm(`Delete the schedule for ${x.payee||'this item'}? Transactions already entered stay.`))return;const r=await J('DELETE','/api/scheduled/'+x.id,{});if(!r.ok){alert(r.j.error);return}sched()}
+const nextMonth=d=>{let[y,m,dd]=d.split('-').map(Number);m++;if(m>12){m=1;y++}const l=new Date(y,m,0).getDate();return`${y}-${String(m).padStart(2,'0')}-${String(Math.min(dd,l)).padStart(2,'0')}`};
+function schThis(aid,tid){const r=ROWS[tid];sform(null,{account_id:aid,payee:r.payee,memo:r.memo,amount:r.amount,category:r.category==='--Split--'?'':r.category,transfer:r.transfer||'',splits:r.splits||[],freq:'monthly',next_date:nextMonth(r.date),end_date:'',count:'',auto:false,active:true})}
+async function sform(i,pre){await meta();const x=pre||(i!=null?SCH[i]:{account_id:null,payee:'',memo:'',amount:'',category:'',transfer:'',splits:[],freq:'monthly',next_date:TODAY,end_date:'',count:'',auto:false,active:true}),
+  V=(k,v)=>document.getElementById(k).value=v??'',ed=i!=null&&!pre,ea=META.accounts.filter(a=>a.editable);
+  f_l1.style.display='none';f_sch.style.display='';f_tagw.style.display='none';cats.innerHTML=META.categories.map(c=>`<option value="${e(c)}">`).join('');
+  s_acct.innerHTML=ea.map(a=>`<option value=${a.id}>${e(a.name)}`).join('');s_freq.innerHTML=Object.keys(FL).map(k=>`<option value=${k}>${FL[k]}`).join('');
+  f_xf.innerHTML='<option value="">—'+ea.map(a=>`<option>${e(a.name)}`).join('');
+  dt.textContent=ed?'Edit schedule':'New schedule';V('s_acct',x.account_id);V('s_freq',x.freq);V('s_next',x.next_date);V('s_end',x.end_date);V('s_cnt',x.count);V('s_auto',x.auto?1:0);s_active.checked=x.active!==false;
+  V('f_payee',x.payee);V('f_memo',x.memo);V('f_amt',x.amount);V('f_cat',x.category);V('f_xf',x.transfer);spl.innerHTML='';(x.splits||[]).forEach(s=>addSplit(s));err.textContent='';del.style.display=ed?'':'none';
+  save.onclick=async()=>{const sl=[...spl.rows].map(t=>({category:t.querySelector('.sc').value,transfer:t.querySelector('.sx').value,memo:t.querySelector('.sm').value,amount:t.querySelector('.sa').value}));
+    const b={account_id:+s_acct.value,payee:f_payee.value,memo:f_memo.value,amount:f_amt.value,category:f_cat.value,transfer:f_xf.value,splits:sl,freq:s_freq.value,next_date:s_next.value,end_date:s_end.value,count:s_cnt.value,auto:s_auto.value==='1',active:s_active.checked};
+    const r=await J(ed?'PUT':'POST',ed?'/api/scheduled/'+x.id:'/api/scheduled',b);if(!r.ok){err.textContent=r.j.error;return}dlg.close();if(location.hash==='#/scheduled')sched();else location.hash='#/scheduled'};
+  del.onclick=async()=>{if(!confirm('Delete this schedule?'))return;const r=await J('DELETE','/api/scheduled/'+x.id,{});if(!r.ok){err.textContent=r.j.error;return}dlg.close();sched()};dlg.showModal()}
+let PY={q:'',unused:false},PYL=[],PYS=new Set();
+async function payees(msg){const R=await J('GET','/api/payees');PYL=R.j.payees;PYS=new Set();const q=PY.q.toLowerCase(),L=PYL.filter(p=>(!q||p.name.toLowerCase().includes(q))&&(!PY.unused||!p.used)),sh=L.slice(0,300);
+  $.innerHTML=`<p><a href="#/">← Accounts</a></p><h2>Payees</h2>${msg?`<p class=m>${e(msg)}</p>`:''}<p><input id=py_q type=search placeholder="filter" value="${e(PY.q)}" onchange="PY.q=this.value;payees()"> <label style="display:inline"><input type=checkbox ${PY.unused?'checked':''} onchange="PY.unused=this.checked;payees()"> unused only</label> <button onclick="pyMerge()">Merge ticked…</button> <span class=m>${L.length} payee(s)${L.length>300?', first 300 shown (use the filter)':''}. Rename to an existing name merges the two. Changes cascade to transactions, memorized and scheduled items and are in the edit log.</span></p>
+  <table><tr><th><th>Payee<th class=n>Transactions<th class=n>Memorized<th class=n>Scheduled<th>`+sh.map(p=>`<tr><td><input type=checkbox onchange="this.checked?PYS.add(${JSON.stringify(p.name).replace(/"/g,'&quot;')}):PYS.delete(${JSON.stringify(p.name).replace(/"/g,'&quot;')})"><td>${e(p.name)}<td class=n>${p.txns}<td class=n>${p.memorized}<td class=n>${p.scheduled}<td><a onclick="pyRen(${JSON.stringify(p.name).replace(/"/g,'&quot;')})">rename</a>${p.used?'':` &nbsp; <a onclick="pyDel(${JSON.stringify(p.name).replace(/"/g,'&quot;')})">delete</a>`}`).join('')+'</table>'}
+async function pyRen(n){const m=prompt('Rename payee "'+n+'" to (an existing name merges them):',n);if(!m||m===n)return;const x=await J('PUT','/api/payees',{name:n,new_name:m});if(!x.ok){alert(x.j.error);return}META=null;payees('renamed')}
+async function pyDel(n){if(!confirm('Delete unused payee "'+n+'"?'))return;const x=await J('DELETE','/api/payees',{name:n});if(!x.ok){alert(x.j.error);return}META=null;payees('deleted')}
+async function pyMerge(){const n=[...PYS];if(n.length<2){alert('Tick at least two payees.');return}const m=prompt('Merge these '+n.length+' payees into (type the name to keep):\n'+n.join('\n'),n[0]);if(!m)return;const x=await J('POST','/api/payees/merge',{names:n,into:m});if(!x.ok){alert(x.j.error);return}META=null;payees('merged '+n.length+' into "'+m+'"')}
+async function tags_(msg){const R=await J('GET','/api/tags');
+  $.innerHTML=`<p><a href="#/">← Accounts</a></p><h2>Tags</h2>${msg?`<p class=m>${e(msg)}</p>`:''}<p><input id=tg_name placeholder="new tag" size=20> <button onclick="tgAdd()">Add</button> <span class=m>Tags are optional labels on a transaction or split (the Tag field in the transaction form).</span></p><table><tr><th>Tag<th class=n>Used<th>`+R.j.tags.map(t=>`<tr><td>${e(t.name)}<td class=n>${t.used}<td><a onclick="tgRen(${t.id},${JSON.stringify(t.name).replace(/"/g,'&quot;')})">rename</a> &nbsp; <a onclick="tgDel(${t.id})">delete</a>`).join('')+'</table>'}
+async function tgAdd(){const x=await J('POST','/api/tags',{name:tg_name.value});if(!x.ok){alert(x.j.error);return}META=null;tags_()}
+async function tgRen(id,n){const m=prompt('Rename tag "'+n+'" to:',n);if(!m||m===n)return;const x=await J('PUT','/api/tags/'+id,{name:m});if(!x.ok){alert(x.j.error);return}META=null;tags_('renamed')}
+async function tgDel(id){if(!confirm('Delete this tag?'))return;const x=await J('DELETE','/api/tags/'+id,{});if(!x.ok){alert(x.j.error);return}META=null;tags_('deleted')}
+async function data_(msg){await meta();const B=(await J('GET','/api/backups')).j;
+  $.innerHTML=`<p><a href="#/">← Accounts</a></p><h2>Data</h2>${msg?`<p class=m>${e(msg)}</p>`:''}
+  <h3>Backups</h3><p><button onclick="bkNow()">Back up now</button> <span class=m>copies of the whole database in <code>${e(B.dir)}</code>. One is made automatically before every upgrade and before every restore.</span></p>
+  <table><tr><th>When<th>Kind<th>File<th class=n>Size<th>`+B.backups.map(b=>`<tr><td>${e(b.when.replace('T',' '))}<td>${e(b.kind)}<td class=m>${e(b.name)}<td class=n>${Math.round(b.size/1024).toLocaleString()} KB<td><a onclick="bkRestore('${e(b.name)}')">restore…</a>`).join('')+`</table>
+  <h3>Export csv</h3><p>Account <select id=ex_a><option value=all>All accounts${META.accounts.map(a=>`<option value=${a.id}>${e(a.name)}`).join('')}</select> &nbsp; From <input type=date id=ex_f> To <input type=date id=ex_t> <button onclick="exTx()">Download transactions</button> &nbsp; <a href="/api/export/accounts.csv">Download accounts list</a></p><p class=m>One row per transaction, or per split line for split transactions. Opens in Excel / Numbers / Sheets.</p>`}
+async function bkNow(){const l=prompt('Optional label for this backup (letters and numbers only), or leave blank:','');if(l===null)return;const x=await J('POST','/api/backups',{label:l});if(!x.ok){alert(x.j.error);return}data_('backup saved: '+x.j.name)}
+async function bkRestore(n){if(!confirm('Restore '+n+'?\n\nThe current database is backed up first, then replaced by this backup. Anything entered since that backup will only be in the new "pre-restore" backup.'))return;const x=await J('POST','/api/backups/restore',{name:n,confirm:true});if(!x.ok){alert(x.j.error);return}META=null;data_('restored '+x.j.restored+'. previous database saved as '+x.j.previous_saved_as)}
+function exTx(){const p=new URLSearchParams({account:ex_a.value});if(ex_f.value)p.set('from',ex_f.value);if(ex_t.value)p.set('to',ex_t.value);location.href='/api/export/transactions.csv?'+p}
+function route(){if(location.hash==='#/payees')return payees();if(location.hash==='#/tags')return tags_();if(location.hash==='#/data')return data_();if(location.hash==='#/scheduled')return sched();if(location.hash==='#/categories')return cats_();if(location.hash==='#/securities')return secs_();if(location.hash==='#/import')return imp();if(location.hash==='#/spending')return spend();if(location.hash==='#/networth')return networth();if(location.hash.startsWith('#/portfolio')){if(location.hash.includes('expand'))PF.all=true;return port()}const q=location.hash.match(/^#\/rec\/(\d+)/);if(q)return rec(+q[1]);const m=location.hash.match(/^#\/a\/(\d+)/);if(m){reg(+m[1]);if(/\/details/.test(location.hash))adet(+m[1])}else accounts()}
+addEventListener('hashchange',()=>{S.q='';S.off=0;S.sort='date';S.dir='desc';route()});route();
+</script>
