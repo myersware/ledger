@@ -99,3 +99,7 @@ Endpoints: `GET /api/reports/spending`, `/api/reports/spending/transactions`, `/
 - The data repairs, balance check and tests that belong to one person's data are not in this repo.
 - `ui_cdp.js`: tiny headless-chromium driver used by `test_ui.py`.
 - `testfix.py`: the made-up ledger used by the tests; `python3 testfix.py NEW.sqlite` writes it as a sample.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
