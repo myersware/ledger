@@ -6,6 +6,23 @@ from urllib.parse import urlparse, parse_qs
 import account_details, backups, catalog, core, downloads, edits, exports, importer, inventory, invest, names, plaid, portfolio, reconcile, reports, scheduled
 
 STATIC = os.path.join(core.HERE, "static")
+STARTED = datetime.datetime.now().astimezone()
+
+
+def version():
+    import subprocess
+    try: return subprocess.run(["git", "-C", core.HERE, "log", "-1", "--format=%h %cI"], capture_output=True, text=True, timeout=5).stdout.split()
+    except Exception: return []
+
+
+def about(db):
+    v = version(); n = lambda t: db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+    lo, hi = db.execute("SELECT MIN(date), MAX(date) FROM transactions").fetchone()
+    now = datetime.datetime.now().astimezone()
+    return dict(name="Ledger", version=v[0] if v else "unknown", version_date=v[1] if len(v) > 1 else None,
+                schema=db.execute("PRAGMA user_version").fetchone()[0], db_path=os.path.abspath(core.DB_PATH),
+                accounts=n("accounts"), transactions=n("transactions"), payees=n("payees"), categories=n("categories"),
+                first_date=lo, last_date=hi, started=STARTED.isoformat(timespec="seconds"), uptime_s=int((now - STARTED).total_seconds()))
 
 
 def mapping(db):
@@ -134,6 +151,7 @@ class H(BaseHTTPRequestHandler):
                 if m:
                     try: return self.send(200, json.dumps(reconcile.data(db, int(m[1]), qs.get("date") or datetime.date.today().isoformat())))
                     except edits.ApiError as e: return self.send(e.code, json.dumps({"error": str(e)}))
+                if p == "/api/about": return self.send(200, json.dumps(about(db)))
                 if p == "/api/meta":
                     return self.send(200, json.dumps(dict(
                         accounts=[dict(id=r["account_id"], name=r["name"], editable=r["register_type"] in edits.OK_TYPES, inv=r["register_type"] == "Invst")
