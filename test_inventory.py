@@ -3,6 +3,7 @@
 the net worth 'Household items' line and its saved toggle (account balances never change), and the v9 -> v10 migration with a backup. Fresh empty ledger."""
 import base64, datetime, glob, os, sqlite3, subprocess, sys, urllib.error, urllib.request
 from testempty import Empty, Checker, HERE
+import core
 check = Checker(); E = Empty(8791); api = E.api; E.start()
 PNG = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
 b64 = lambda b: base64.b64encode(b).decode()
@@ -12,7 +13,7 @@ def raw(path, method="GET"):
     except urllib.error.HTTPError as e: return e.code, dict(e.headers), e.read()
 try:
     db = sqlite3.connect(E.db)
-    check("fresh install is schema v10 with the inventory and settings tables", db.execute("PRAGMA user_version").fetchone()[0] == 10 and db.execute("SELECT COUNT(*) FROM inventory_items").fetchone()[0] == 0 and db.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 0)
+    check("fresh install is schema v10+ with the inventory and settings tables", db.execute("PRAGMA user_version").fetchone()[0] >= 10 and db.execute("SELECT COUNT(*) FROM inventory_items").fetchone()[0] == 0 and db.execute("SELECT COUNT(*) FROM settings").fetchone()[0] == 0)
     chk = api("POST", "/api/accounts", dict(name="Checking", type="Checking", opening_balance=5000, opening_date="2026-01-01"))[1]["account_id"]
     api("POST", "/api/categories", dict(name="Hobby"))
     tx = api("POST", f"/api/accounts/{chk}/transactions", dict(date="2026-03-15", payee="Guitar Center", memo="Martin D-28", amount=-2499.99, category="Hobby"))[1]["txn_id"]
@@ -105,7 +106,7 @@ finally:
 E2 = Empty(8792); d = sqlite3.connect(E2.db); d.execute("DROP TABLE inventory_items"); d.execute("DROP TABLE settings"); d.execute("PRAGMA user_version=9")
 d.execute("INSERT INTO accounts(name, list_type, register_type) VALUES('Keep me','Bank','Bank')"); d.commit(); d.close()
 r = subprocess.run([sys.executable, "app.py", "--init-only"], env=E2.env, cwd=HERE, capture_output=True, text=True)
-bk = glob.glob(os.path.join(E2.tmp, "data", "backups", "*-pre-v10.sqlite")); d = sqlite3.connect(E2.db)
+bk = glob.glob(os.path.join(E2.tmp, "data", "backups", f"*-pre-v{core.SCHEMA_VERSION}.sqlite")); d = sqlite3.connect(E2.db)
 check("v9 -> v10 makes a dated backup first", r.returncode == 0 and len(bk) == 1 and sqlite3.connect(bk[0]).execute("PRAGMA user_version").fetchone()[0] == 9, r.stderr)
-check("migrated: version 10, tables there, data kept", d.execute("PRAGMA user_version").fetchone()[0] == 10 and d.execute("SELECT COUNT(*) FROM inventory_items").fetchone()[0] == 0 and d.execute("SELECT name FROM accounts").fetchone()[0] == "Keep me")
+check("migrated: current version, tables there, data kept", d.execute("PRAGMA user_version").fetchone()[0] == core.SCHEMA_VERSION and d.execute("SELECT COUNT(*) FROM inventory_items").fetchone()[0] == 0 and d.execute("SELECT name FROM accounts").fetchone()[0] == "Keep me")
 sys.exit(0 if check.ok else 1)

@@ -237,8 +237,10 @@ def preview(db):
                 y, mm = map(int, mo[-1].split("-")); end = (datetime.date(y + mm // 12, mm % 12 + 1, 1) - datetime.timedelta(days=1)).isoformat()
                 for x in db.execute("SELECT txn_id, date, amount, payee_text, source FROM transactions WHERE account_id=? AND date BETWEEN ? AND ? AND ext_id IS NULL ORDER BY date, txn_id", (aid, mo[0] + "-01", end)):
                     if x["txn_id"] not in used_x: res["ledger_only"].append(dict(txn_id=x["txn_id"], date=x["date"], amount=x["amount"], payee=x["payee_text"], source=x["source"]))
-        hist = {}
+        hist, dflt = {}, {}
         if not inv:
+            try: dflt = {" ".join(n.split()).lower(): c for n, c in db.execute("SELECT name, default_category FROM payees WHERE default_category IS NOT NULL AND name IS NOT NULL") if c in cats}
+            except Exception: dflt = {}
             for p in db.execute("SELECT payee_text, category FROM transactions WHERE account_id=? AND category IS NOT NULL AND payee_text IS NOT NULL ORDER BY date, txn_id", (aid,)):
                 hist[p[0].strip().lower()] = p[1]
         for r in rows:
@@ -246,9 +248,11 @@ def preview(db):
             counts[st] += 1
             cat = src = None
             if not inv and st == "new":
-                h = hist.get((r.get("payee") or "").strip().lower())
-                if h: cat, src = h, "payee-history"
-                elif PLAID_MAP.get(r.get("category")) in cats: cat, src = PLAID_MAP[r["category"]], "plaid-map"
+                h = hist.get((r.get("payee") or "").strip().lower()); dc = dflt.get(" ".join((r.get("payee") or "").split()).lower())
+                pm = PLAID_MAP.get(r.get("category")) if PLAID_MAP.get(r.get("category")) in cats else None
+                if dc and not pm: cat, src = dc, "from payee default"   # a source category always wins over the payee default
+                elif h: cat, src = h, "payee-history"
+                elif pm: cat, src = pm, "plaid-map"
             res["rows"].append(dict(file=r["_file"], line=r["_line"], date=r["date"], payee=r.get("payee") or "", amount=r["_c"] / 100,
                                     memo=r.get("memo") or "", plaid_category=r.get("category") or "", txn_id=r["txn_id"], status=st,
                                     possible_match=(r.get("_match") if st == "deferred" else None), match=(r.get("_match") if st in ("matched", "duplicate") else None),

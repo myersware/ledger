@@ -4,7 +4,7 @@ from decimal import Decimal as Dc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("LEDGER_DB", os.path.join(HERE, "data", "ledger.sqlite"))
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 # Investment cash rules (a best reading of QIF semantics, not Quicken's own number).
 CASH_PLUS = {"Div", "CGLong", "CGShort", "IntInc", "Sell", "XIn", "Cash", "ContribX", "MiscInc"}
@@ -123,6 +123,8 @@ def migrate(backup=True):
           CREATE TABLE IF NOT EXISTS inventory_items(item_id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, category TEXT, make TEXT, model TEXT, serial TEXT,
             location TEXT, purchase_date TEXT, purchase_price REAL, current_value REAL, value_date TEXT, notes TEXT, txn_id INTEGER, created TEXT, updated TEXT);
           CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);""")
+    if ver < 11:  # a payee's default category, set from the payees page; used for uncategorized import rows
+        if "default_category" not in {r[1] for r in db.execute("PRAGMA table_info(payees)")}: db.execute("ALTER TABLE payees ADD COLUMN default_category TEXT")
     db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     db.commit(); db.close()
 
